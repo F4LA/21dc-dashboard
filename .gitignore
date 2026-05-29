@@ -1,0 +1,10 @@
+# Mac metadata
+.DS_Store
+
+# Claude Code tooling
+.claude/
+
+# Private business context (Master Decision Log, Overview, etc.)
+context/
+
+# Local-only docs

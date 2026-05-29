@@ -1,0 +1,2035 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>21DC Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #94a3b8;
+      --accent: #6366f1;
+      --accent-light: #e0e7ff;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --radius: 8px;
+      --shadow: 0 1px 3px rgba(0,0,0,0.08);
+      --shadow-lg: 0 20px 60px rgba(0,0,0,0.2);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────── */
+    .header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: var(--shadow);
+    }
+
+    .header-left { display: flex; align-items: center; gap: 12px; }
+
+    .logo {
+      width: 32px; height: 32px;
+      background: var(--accent);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-weight: 700; font-size: 13px;
+      flex-shrink: 0;
+    }
+
+    .header h1 { font-size: 15px; font-weight: 600; }
+    .header-meta { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+
+    .header-right { display: flex; align-items: center; gap: 8px; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 6px 12px; border-radius: 6px;
+      font-size: 13px; font-weight: 500;
+      cursor: pointer; border: none;
+      transition: all 0.15s; line-height: 1;
+    }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { background: #4f46e5; }
+    .btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); }
+    .btn-ghost:hover { background: var(--bg); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+    /* ── Stats bar ───────────────────────────────────────── */
+    .stats-bar {
+      display: flex; background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .stat-item {
+      flex: 1; padding: 10px 16px; text-align: center;
+      border-right: 1px solid var(--border);
+    }
+    .stat-item:last-child { border-right: none; }
+
+    .stat-value { font-size: 22px; font-weight: 700; line-height: 1; }
+    .stat-label { font-size: 10px; color: var(--text-muted); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    /* ── Main ────────────────────────────────────────────── */
+    .main { max-width: 1440px; margin: 0 auto; padding: 20px 24px; }
+
+    /* ── Filters ─────────────────────────────────────────── */
+    .toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px; flex-wrap: wrap; gap: 10px;
+    }
+
+    .filter-bar { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    .filter-chip {
+      padding: 4px 12px; border-radius: 20px; font-size: 12px;
+      cursor: pointer; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text-secondary);
+      transition: all 0.15s; white-space: nowrap;
+    }
+    .filter-chip:hover { border-color: var(--accent); color: var(--accent); }
+    .filter-chip.active { background: var(--accent); border-color: var(--accent); color: white; font-weight: 500; }
+    .filter-count { font-size: 10px; opacity: 0.75; margin-left: 3px; }
+
+    /* ── Table ───────────────────────────────────────────── */
+    .table-wrap {
+      background: var(--surface); border-radius: var(--radius);
+      border: 1px solid var(--border); overflow: hidden;
+    }
+
+    table { width: 100%; border-collapse: collapse; }
+
+    thead th {
+      padding: 10px 14px; text-align: left;
+      font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--text-muted); border-bottom: 1px solid var(--border);
+      background: #fafafa; cursor: pointer; user-select: none;
+      white-space: nowrap;
+    }
+    thead th:hover { color: var(--text-primary); }
+    thead th.sort-asc::after { content: ' ↑'; }
+    thead th.sort-desc::after { content: ' ↓'; }
+
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      cursor: pointer; transition: background 0.1s;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #f8fafc; }
+
+    td { padding: 10px 14px; font-size: 13px; vertical-align: middle; }
+
+    /* ── Avatar ──────────────────────────────────────────── */
+    .avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 600; flex-shrink: 0; color: white;
+    }
+
+    .contact-cell { display: flex; align-items: center; gap: 9px; }
+    .contact-name { font-weight: 500; font-size: 13px; }
+    .contact-email { font-size: 11px; color: var(--text-muted); }
+
+    /* ── Stage badge ─────────────────────────────────────── */
+    .stage-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px; border-radius: 12px;
+      font-size: 11px; font-weight: 500; white-space: nowrap;
+    }
+    .stage-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ── Time ────────────────────────────────────────────── */
+    .time-cell { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+    .time-cell.warn { color: #d97706; font-weight: 500; }
+    .time-cell.danger { color: var(--danger); font-weight: 600; }
+
+    /* ── Indicators ──────────────────────────────────────── */
+    .indicators { display: flex; gap: 4px; }
+    .ind {
+      font-size: 11px; font-weight: 500;
+      padding: 2px 7px; border-radius: 10px;
+      white-space: nowrap;
+    }
+    .ind-yes { background: #d1fae5; color: #065f46; }
+    .ind-no  { background: #f1f5f9; color: #94a3b8; }
+
+    /* ── Note preview ────────────────────────────────────── */
+    .note-preview-cell { max-width: 260px; }
+    .note-text {
+      font-size: 12px; color: var(--text-secondary);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .note-ago { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+    .note-empty { font-size: 12px; color: var(--text-muted); font-style: italic; }
+
+    /* ── States ──────────────────────────────────────────── */
+    .state-box { text-align: center; padding: 56px 20px; }
+    .spinner {
+      width: 30px; height: 30px;
+      border: 3px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin 0.7s linear infinite;
+      margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .state-label { font-size: 14px; color: var(--text-muted); }
+    .state-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+    .state-error { color: var(--danger); }
+
+    /* ── Modal ───────────────────────────────────────────── */
+    .overlay {
+      position: fixed; inset: 0; background: rgba(15,23,42,0.55);
+      z-index: 200; display: flex; align-items: center; justify-content: center;
+      padding: 20px; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    }
+    .overlay.open { opacity: 1; pointer-events: auto; }
+
+    .modal {
+      background: var(--surface); border-radius: 12px;
+      width: 100%; max-width: 620px; max-height: 88vh;
+      display: flex; flex-direction: column;
+      transform: translateY(12px); transition: transform 0.2s;
+      box-shadow: var(--shadow-lg); overflow: hidden;
+    }
+    .overlay.open .modal { transform: translateY(0); }
+
+    .modal-header {
+      padding: 18px 22px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    }
+    .modal-title { font-size: 17px; font-weight: 600; }
+    .modal-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+    .modal-close {
+      width: 30px; height: 30px; border-radius: 6px;
+      border: none; background: var(--bg); cursor: pointer;
+      font-size: 16px; color: var(--text-muted);
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .modal-close:hover { background: var(--border); }
+
+    .modal-body { flex: 1; overflow-y: auto; padding: 18px 22px; }
+
+    /* ── Action buttons ──────────────────────────────────── */
+    .actions-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .action-btn {
+      padding: 8px 12px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--surface);
+      cursor: pointer; font-size: 13px; font-weight: 500;
+      color: var(--text-primary); transition: all 0.15s;
+    }
+    .action-btn:hover { background: var(--bg); border-color: var(--accent); }
+    .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .action-btn-success { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
+    .action-btn-success:hover { background: #a7f3d0; border-color: #34d399; }
+    .action-btn-danger { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+    .action-btn-danger:hover { background: #fecaca; border-color: #f87171; }
+    .action-saved {
+      font-size: 11px; color: var(--success);
+      display: none; text-align: center;
+      margin: 0 0 18px;
+    }
+
+    /* ── Settings panel ──────────────────────────────────── */
+    #settings-overlay {
+      position: fixed; inset: 0; background: rgba(15,23,42,0.35);
+      z-index: 300; display: flex; align-items: flex-start; justify-content: flex-end;
+      padding: 62px 16px 0; opacity: 0; pointer-events: none; transition: opacity 0.15s;
+    }
+    #settings-overlay.open { opacity: 1; pointer-events: auto; }
+    .settings-panel {
+      background: var(--surface); border-radius: 12px; width: 272px;
+      box-shadow: var(--shadow-lg); transform: translateY(-8px); transition: transform 0.15s; overflow: hidden;
+    }
+    #settings-overlay.open .settings-panel { transform: translateY(0); }
+    .settings-panel-header {
+      padding: 12px 16px; border-bottom: 1px solid var(--border);
+      font-size: 13px; font-weight: 600;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .settings-body { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+    .settings-row label {
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--text-muted); display: block; margin-bottom: 5px;
+    }
+    .settings-row input[type=date] {
+      width: 100%; padding: 7px 10px; border-radius: 6px;
+      border: 1px solid var(--border); font-size: 13px;
+      background: var(--bg); color: var(--text-primary);
+    }
+    .settings-row input[type=date]:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    .settings-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .settings-saved { font-size: 11px; color: var(--success); display: none; }
+
+    /* ── View tabs ───────────────────────────────────────── */
+    .view-tabs {
+      display: flex; gap: 2px; padding: 0 24px;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      position: sticky; top: 56px; z-index: 90;
+    }
+    .view-tab {
+      padding: 11px 18px; border: none; background: transparent;
+      cursor: pointer; font-size: 14px; font-weight: 500;
+      color: var(--text-muted); border-bottom: 2px solid transparent;
+      margin-bottom: -1px; transition: all 0.15s;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .view-tab:hover { color: var(--text-primary); }
+    .view-tab.active {
+      color: var(--accent); border-bottom-color: var(--accent);
+    }
+    .view-tab-count {
+      background: var(--bg); color: var(--text-secondary);
+      padding: 1px 8px; border-radius: 10px;
+      font-size: 11px; font-weight: 600; line-height: 1.5;
+    }
+    .view-tab.active .view-tab-count {
+      background: var(--accent); color: white;
+    }
+
+    /* ── Action queue table ──────────────────────────────── */
+    .suggested-action {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px; border-radius: 12px;
+      font-size: 12px; font-weight: 500;
+      background: var(--accent-light); color: var(--accent);
+    }
+    .suggested-action.urgent { background: #fee2e2; color: #991b1b; }
+    .suggested-action.late   { background: #fef3c7; color: #92400e; }
+    .queue-empty { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+    .queue-empty-emoji { font-size: 36px; margin-bottom: 10px; }
+
+    /* ── Onboarding view ─────────────────────────────────── */
+    .onboarding-wrap { padding: 0; }
+    .ob-section { margin-bottom: 32px; }
+    .ob-section-header {
+      display: flex; align-items: baseline; gap: 10px;
+      margin-bottom: 4px;
+    }
+    .ob-section-title { font-size: 17px; font-weight: 600; color: var(--text-primary); }
+    .ob-section-count {
+      background: var(--accent-light); color: var(--accent);
+      padding: 1px 9px; border-radius: 12px;
+      font-size: 12px; font-weight: 600;
+    }
+    .ob-section-desc {
+      font-size: 13px; color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+    .ob-list { display: flex; flex-direction: column; gap: 8px; }
+    .ob-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 14px 16px;
+      display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+      gap: 14px; box-shadow: var(--shadow);
+    }
+    .ob-card-info { min-width: 0; }
+    .ob-card-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+    .ob-card-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .ob-actions { display: flex; gap: 6px; }
+    .ob-btn {
+      padding: 7px 12px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--surface);
+      cursor: pointer; font-size: 12px; font-weight: 500;
+      color: var(--text-primary); transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .ob-btn:hover { background: var(--bg); border-color: var(--accent); }
+    .ob-btn-primary {
+      background: var(--accent); color: white; border-color: var(--accent);
+    }
+    .ob-btn-primary:hover { background: #4f46e5; }
+    .ob-btn-success {
+      background: #d1fae5; color: #065f46; border-color: #6ee7b7;
+    }
+    .ob-btn-success:hover { background: #a7f3d0; }
+    .ob-empty {
+      text-align: center; padding: 40px 20px; color: var(--text-muted);
+      background: var(--surface); border-radius: 8px; border: 1px dashed var(--border);
+    }
+    .ob-copied { color: var(--success); font-size: 11px; padding: 4px 8px; }
+    @media (max-width: 700px) {
+      .ob-card { grid-template-columns: 1fr; gap: 10px; }
+      .ob-actions { justify-content: flex-end; flex-wrap: wrap; }
+    }
+
+    /* ── Accountability view ─────────────────────────────── */
+    .acc-wrap { padding: 0; }
+    .acc-section { margin-bottom: 32px; }
+    .acc-section-header {
+      display: flex; align-items: baseline; gap: 10px;
+      margin-bottom: 4px;
+    }
+    .acc-section-title { font-size: 17px; font-weight: 600; color: var(--text-primary); }
+    .acc-section-count {
+      background: #fee2e2; color: #991b1b;
+      padding: 1px 9px; border-radius: 12px;
+      font-size: 12px; font-weight: 600;
+    }
+    .acc-section-count.zero { background: #d1fae5; color: #065f46; }
+    .acc-section-desc {
+      font-size: 13px; color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+    .acc-list { display: flex; flex-direction: column; gap: 8px; }
+    .acc-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 14px 16px;
+      display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+      gap: 14px; box-shadow: var(--shadow);
+      cursor: pointer; transition: all 0.15s;
+    }
+    .acc-card:hover { border-color: var(--accent); background: var(--bg); }
+    .acc-card-info { min-width: 0; }
+    .acc-card-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+    .acc-card-issue {
+      font-size: 12px; color: #991b1b; font-weight: 500; margin-top: 3px;
+    }
+    .acc-card-time {
+      font-size: 12px; color: var(--text-muted); white-space: nowrap;
+    }
+    .acc-empty {
+      text-align: center; padding: 32px 20px; color: var(--text-muted);
+      background: var(--surface); border-radius: 8px; border: 1px dashed var(--border);
+    }
+
+    /* ── Analytics view ──────────────────────────────────── */
+    .an-wrap { padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media (max-width: 900px) { .an-wrap { grid-template-columns: 1fr; } }
+    .an-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 18px 22px; box-shadow: var(--shadow);
+    }
+    .an-card-title {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 16px;
+    }
+    .funnel-step {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 14px; background: var(--bg);
+      border-radius: 8px; border: 1px solid var(--border);
+    }
+    .funnel-step-label { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+    .funnel-step-value { font-size: 22px; font-weight: 700; color: var(--text-primary); }
+    .funnel-connector {
+      display: flex; justify-content: center; align-items: center;
+      padding: 5px 0; gap: 6px; font-size: 11px; color: var(--text-muted);
+    }
+    .funnel-connector-arrow { color: var(--text-muted); }
+    .funnel-connector-pct { font-weight: 600; color: var(--accent); }
+    .an-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      padding: 10px 0; border-bottom: 1px solid var(--border);
+    }
+    .an-row:last-child { border-bottom: none; }
+    .an-row-label { font-size: 13px; color: var(--text-secondary); }
+    .an-row-meta { font-size: 11px; color: var(--text-muted); margin-left: 6px; }
+    .an-row-value { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+    .an-row-total .an-row-label { font-weight: 700; color: var(--text-primary); }
+    .an-row-total .an-row-value { color: var(--success); font-size: 18px; }
+
+    /* ── History view ────────────────────────────────────── */
+    .hist-wrap { padding: 0; }
+    .hist-table {
+      width: 100%; background: var(--surface); border-radius: 10px;
+      box-shadow: var(--shadow); overflow: hidden; border-collapse: collapse;
+    }
+    .hist-table th {
+      background: var(--bg); padding: 12px 14px;
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--text-muted); text-align: left;
+      border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    .hist-table td {
+      padding: 14px; font-size: 13px; color: var(--text-primary);
+      border-bottom: 1px solid var(--border);
+    }
+    .hist-table tr:last-child td { border-bottom: none; }
+    .hist-table tr:hover td { background: var(--bg); }
+    .hist-challenge { font-weight: 600; font-size: 14px; }
+    .hist-pct { color: var(--text-muted); font-size: 11px; margin-left: 5px; }
+    .hist-revenue { color: var(--success); font-weight: 600; }
+    .hist-empty {
+      text-align: center; padding: 60px 30px; color: var(--text-muted);
+      background: var(--surface); border-radius: 10px;
+      border: 1px dashed var(--border);
+    }
+    .hist-empty-emoji { font-size: 36px; margin-bottom: 12px; }
+    .hist-empty-text { font-size: 14px; margin-bottom: 6px; color: var(--text-primary); }
+    .hist-empty-sub { font-size: 12px; }
+
+    .section-title {
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 10px;
+    }
+
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 22px; }
+    .info-item label { font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 3px; }
+    .info-item span { font-size: 13px; font-weight: 500; }
+
+    /* Add note */
+    .add-note { background: var(--bg); border-radius: 8px; padding: 12px; margin-bottom: 22px; border: 1px solid var(--border); }
+    .add-note textarea {
+      width: 100%; border: 1px solid var(--border); border-radius: 6px;
+      padding: 9px 11px; font-size: 13px; font-family: inherit;
+      resize: vertical; min-height: 78px; background: var(--surface);
+      color: var(--text-primary); transition: border-color 0.15s;
+    }
+    .add-note textarea:focus { outline: none; border-color: var(--accent); }
+    .add-note-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+    .note-saved { font-size: 12px; color: var(--success); font-weight: 500; }
+
+    /* Notes list */
+    .notes-list { display: flex; flex-direction: column; gap: 8px; }
+    .note-card {
+      background: var(--bg); border-radius: 6px; padding: 10px 13px;
+      border-left: 3px solid var(--border);
+    }
+    .note-card-body { font-size: 13px; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+    .note-card-meta { font-size: 11px; color: var(--text-muted); margin-top: 5px; }
+    .no-notes-msg { font-size: 13px; color: var(--text-muted); text-align: center; padding: 16px; }
+
+    /* ── Responsive ──────────────────────────────────────── */
+    @media (max-width: 800px) {
+      .main { padding: 14px; }
+      .hide-sm { display: none !important; }
+      .stats-bar .stat-item:nth-child(n+4) { display: none; }
+    }
+    @media (max-width: 480px) {
+      .stats-bar { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────── -->
+<header class="header">
+  <div class="header-left">
+    <div class="logo">21</div>
+    <div>
+      <h1>21DC Dashboard</h1>
+      <div class="header-meta" id="header-meta">Loading…</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span id="last-updated" style="font-size:11px;color:var(--text-muted)"></span>
+    <button class="btn btn-ghost btn-sm" id="refresh-btn" onclick="loadData()">↺ Refresh</button>
+    <button class="btn btn-ghost btn-sm" onclick="openSettings()" title="Settings" style="padding:5px 9px;font-size:15px;line-height:1;">⚙</button>
+  </div>
+</header>
+
+<!-- ── View tabs ─────────────────────────────────────────── -->
+<div class="view-tabs">
+  <button class="view-tab active" data-view="tracker" onclick="setView('tracker')">Tracker</button>
+  <button class="view-tab" data-view="queue" onclick="setView('queue')">
+    Action Queue
+    <span class="view-tab-count" id="queue-count">0</span>
+  </button>
+  <button class="view-tab" data-view="onboarding" onclick="setView('onboarding')">
+    Onboarding
+    <span class="view-tab-count" id="onboarding-count">0</span>
+  </button>
+  <button class="view-tab" data-view="accountability" onclick="setView('accountability')">
+    Accountability
+    <span class="view-tab-count" id="accountability-count">0</span>
+  </button>
+  <button class="view-tab" data-view="analytics" onclick="setView('analytics')">
+    Analytics
+  </button>
+  <button class="view-tab" data-view="history" onclick="setView('history')">
+    History
+  </button>
+</div>
+
+<!-- ── Settings panel ─────────────────────────────────────── -->
+<div id="settings-overlay" onclick="onSettingsOverlayClick(event)">
+  <div class="settings-panel">
+    <div class="settings-panel-header">
+      <span>Settings</span>
+      <button class="modal-close" onclick="closeSettings()">✕</button>
+    </div>
+    <div class="settings-body">
+      <div class="settings-row">
+        <label>Challenge Start Date</label>
+        <input type="date" id="settings-date" />
+      </div>
+      <div class="settings-footer">
+        <span class="settings-saved" id="settings-saved">✓ Saved — reloading…</span>
+        <button class="btn btn-primary btn-sm" onclick="saveStartDate()" id="settings-save-btn">Save</button>
+      </div>
+
+      <div style="border-top:1px solid var(--border); margin-top:6px; padding-top:14px">
+        <div class="settings-row">
+          <label>Archive Current Challenge</label>
+          <input type="text" id="settings-archive-name" placeholder="e.g. 2026-05" />
+        </div>
+        <div class="settings-footer" style="margin-top:8px">
+          <span style="font-size:11px;color:var(--text-muted)">Moves Participants → Historical, clears Active.</span>
+          <button class="btn btn-ghost btn-sm" onclick="archiveChallenge()" id="settings-archive-btn">Archive</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Stats bar ────────────────────────────────────────── -->
+<div class="stats-bar" id="stats-bar" style="display:none">
+  <div class="stat-item"><div class="stat-value" id="s-total">—</div><div class="stat-label">Total</div></div>
+  <div class="stat-item"><div class="stat-value" id="s-participant">—</div><div class="stat-label">No CC</div></div>
+  <div class="stat-item"><div class="stat-value" id="s-cc">—</div><div class="stat-label">CC Scheduled</div></div>
+  <div class="stat-item"><div class="stat-value" id="s-dc">—</div><div class="stat-label">DC Scheduled</div></div>
+  <div class="stat-item"><div class="stat-value" id="s-purchase">—</div><div class="stat-label">Purchases</div></div>
+</div>
+
+<!-- ── Main ─────────────────────────────────────────────── -->
+<div class="main">
+
+  <div class="toolbar">
+    <div class="filter-bar" id="filter-bar"></div>
+    <div style="font-size:12px;color:var(--text-muted)" id="sort-label"></div>
+  </div>
+
+  <div class="table-wrap">
+    <!-- Loading -->
+    <div class="state-box" id="state-loading">
+      <div class="spinner"></div>
+      <div class="state-label">Loading participants and notes…</div>
+      <div class="state-sub">May take 10–15 seconds</div>
+    </div>
+    <!-- Error -->
+    <div class="state-box" id="state-error" style="display:none">
+      <div style="font-size:28px;margin-bottom:8px">⚠️</div>
+      <div class="state-label state-error" id="error-msg">Error loading data</div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="loadData()">Retry</button>
+    </div>
+    <!-- Empty filter -->
+    <div class="state-box" id="state-empty" style="display:none">
+      <div class="state-label">No participants match this filter.</div>
+    </div>
+    <!-- Table -->
+    <table id="data-table" style="display:none">
+      <thead>
+        <tr>
+          <th style="width:46px;cursor:default"></th>
+          <th id="th-name" onclick="sortBy('name')">Participant</th>
+          <th id="th-stage" onclick="sortBy('stageName')" class="hide-sm">Stage</th>
+          <th id="th-time" onclick="sortBy('stageAge')">Time in stage</th>
+          <th class="hide-sm" style="cursor:default">Indicators</th>
+          <th class="hide-sm" style="cursor:default">Last note</th>
+          <th style="width:80px;cursor:default"></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+
+    <!-- Onboarding view -->
+    <div class="onboarding-wrap" id="onboarding-wrap" style="display:none"></div>
+
+    <!-- Accountability view -->
+    <div class="acc-wrap" id="accountability-wrap" style="display:none"></div>
+
+    <!-- Analytics view -->
+    <div class="an-wrap" id="analytics-wrap" style="display:none"></div>
+
+    <!-- History view -->
+    <div class="hist-wrap" id="history-wrap" style="display:none"></div>
+  </div>
+</div>
+
+<!-- ── Contact Modal ─────────────────────────────────────── -->
+<div class="overlay" id="overlay" onclick="onOverlayClick(event)">
+  <div class="modal" id="modal">
+
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="m-name">—</div>
+        <div class="modal-sub" id="m-sub">—</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+
+    <div class="modal-body">
+
+      <!-- Info grid -->
+      <div class="section-title">Information</div>
+      <div class="info-grid">
+        <div class="info-item"><label>Stage</label><span id="m-stage">—</span></div>
+        <div class="info-item"><label>Time in stage</label><span id="m-time">—</span></div>
+        <div class="info-item"><label>Email</label><span id="m-email">—</span></div>
+        <div class="info-item"><label>Phone</label><span id="m-phone">—</span></div>
+        <div class="info-item"><label>Everfit Login</label><span id="m-everfit">—</span></div>
+        <div class="info-item"><label>Kickoff Registered</label><span id="m-kickoff">—</span></div>
+      </div>
+
+      <!-- Stage actions -->
+      <div class="section-title">Mark stage</div>
+      <div class="actions-grid">
+        <button class="action-btn action-btn-danger" onclick="markEvent('CC Cancelled')">CC Cancelled</button>
+        <button class="action-btn action-btn-danger" onclick="markEvent('CC No Show')">CC No Show</button>
+        <button class="action-btn action-btn-danger" onclick="markEvent('DC Cancelled')">DC Cancelled</button>
+        <button class="action-btn action-btn-danger" onclick="markEvent('DC No Show')">DC No Show</button>
+        <button class="action-btn" onclick="markEvent(&quot;Didn't Purchase&quot;)" style="grid-column: span 2">Didn't Purchase</button>
+        <button class="action-btn action-btn-success" onclick="markEvent('Purchase 101')">Purchase 101</button>
+        <button class="action-btn action-btn-success" onclick="markEvent('Purchase GC')">Purchase GC</button>
+      </div>
+
+      <!-- Outreach actions (Dennis) -->
+      <div class="section-title" style="margin-top:18px">Mark outreach</div>
+      <div class="actions-grid">
+        <button class="action-btn" onclick="markEvent('Reschedule DM Sent')">Reschedule DM</button>
+        <button class="action-btn" onclick="markEvent('Call #1')">Call #1</button>
+        <button class="action-btn" onclick="markEvent('Call #2')">Call #2</button>
+        <button class="action-btn" onclick="markEvent('Offer Doc Sent')">Offer Doc</button>
+      </div>
+      <div class="action-saved" id="action-saved">✓ Action recorded</div>
+
+      <!-- Add note -->
+      <div class="section-title">Add note</div>
+      <div class="add-note">
+        <textarea id="note-input" placeholder="Write a note…"></textarea>
+        <div class="add-note-footer">
+          <span class="note-saved" id="note-saved" style="display:none">✓ Note saved to GHL</span>
+          <span></span>
+          <button class="btn btn-primary btn-sm" id="note-btn" onclick="saveNote()">Save note</button>
+        </div>
+      </div>
+
+      <!-- Notes history -->
+      <div class="section-title">Notes (<span id="m-notes-count">0</span>)</div>
+      <div class="notes-list" id="notes-list">
+        <div class="no-notes-msg">No notes recorded.</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbztuKTnQ75TyLWYQPsF1YHhMflMtTCLjT30nkeeq0RFt5c5_3Ot-wiKMl484V0ca2oA/exec';
+
+// ── Stage styles ──────────────────────────────────────────
+const STAGE_STYLE = {
+  'Participant':       { bg:'#e0e7ff', text:'#4338ca', dot:'#6366f1' },
+  'CC - Scheduled':    { bg:'#fef3c7', text:'#92400e', dot:'#f59e0b' },
+  'CC - No Show':      { bg:'#fee2e2', text:'#991b1b', dot:'#ef4444' },
+  'CC - Cancelled':    { bg:'#ffedd5', text:'#9a3412', dot:'#f97316' },
+  'DC - Scheduled':    { bg:'#dbeafe', text:'#1e40af', dot:'#3b82f6' },
+  'DC - No Show':      { bg:'#fee2e2', text:'#991b1b', dot:'#ef4444' },
+  'DC - Cancelled':    { bg:'#ffedd5', text:'#9a3412', dot:'#f97316' },
+  "Didn't Purchase":   { bg:'#f1f5f9', text:'#475569', dot:'#94a3b8' },
+  'Purchase 101':      { bg:'#d1fae5', text:'#065f46', dot:'#10b981' },
+  'Purchase GC':       { bg:'#d1fae5', text:'#065f46', dot:'#10b981' },
+};
+
+// ── Filter groups ─────────────────────────────────────────
+const FILTERS = [
+  { id:'all',         label:'All',           stages: null },
+  { id:'participant', label:'No CC',         stages:['Participant'] },
+  { id:'cc_ok',       label:'CC Scheduled',  stages:['CC - Scheduled'] },
+  { id:'cc_issue',    label:'CC Issues',     stages:['CC - No Show','CC - Cancelled'] },
+  { id:'dc_ok',       label:'DC Scheduled',  stages:['DC - Scheduled'] },
+  { id:'dc_issue',    label:'DC Issues',     stages:['DC - No Show','DC - Cancelled'] },
+  { id:'no_buy',      label:'No Purchase',   stages:["Didn't Purchase"] },
+  { id:'bought',      label:'Purchases',     stages:['Purchase 101','Purchase GC'] },
+];
+
+// ── State ─────────────────────────────────────────────────
+let participants = [];
+let activeFilter = 'all';
+let activeView   = 'tracker';   // 'tracker' or 'queue'
+let sortKey = 'stageAge';
+let sortDir  = -1;
+let activeContact = null;
+
+// ── View tabs ─────────────────────────────────────────────
+function setView(view) {
+  activeView = view;
+  document.querySelectorAll('.view-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === view);
+  });
+  if (view !== 'tracker') activeFilter = 'all';
+  renderFilters();
+
+  // Hide all view containers
+  document.getElementById('onboarding-wrap').style.display     = 'none';
+  document.getElementById('accountability-wrap').style.display = 'none';
+  document.getElementById('analytics-wrap').style.display      = 'none';
+  document.getElementById('history-wrap').style.display        = 'none';
+
+  if (view === 'onboarding')          renderOnboarding();
+  else if (view === 'accountability') renderAccountability();
+  else if (view === 'analytics')      renderAnalytics();
+  else if (view === 'history')        renderHistory();
+  else                                renderTable();
+}
+
+// ── Onboarding message templates ──────────────────────────
+// Customize the message text here. {firstName} will be replaced.
+const MESSAGE_TEMPLATES = {
+  everfit: (firstName) =>
+`Hi ${firstName},
+
+Welcome to the 21-Day Challenge! I'm Jackie, one of the coaches here at Strong Standard, and I'm really excited to have you with us.
+
+I wanted to quickly reach out because I noticed you haven't connected to Everfit yet.
+
+After signing up, you should have received a separate email from Everfit, which is the app we use for the challenge. That email gives you access to create your account and get fully set up.
+
+If you don't see it, no worries, it may have landed in your spam or promotions folder.
+
+This part is important because Everfit is where everything for the challenge will happen, your onboarding tasks, coaching, updates, resources, and communication with the team.
+
+You can also use this link to get connected:
+
+[PASTE EVERFIT LINK HERE]
+
+Once you're in, make sure to complete the onboarding tasks so you're ready to go.
+
+If you have any trouble accessing it, just reply to this email and we'll help you out.
+
+Excited to have you with us!
+
+Jackie`,
+
+  schedule: (firstName) =>
+`Hey ${firstName}! I noticed you haven't booked your Clarity Call yet, so I just wanted to reach out personally.
+
+I really don't want you to miss it because this call can be super helpful, especially if you're trying to figure out what's actually been holding you back and what to focus on during the rest of the challenge.
+
+It's only 20 minutes, and the goal is for you to walk away with more clarity and a better direction moving forward.
+
+Here's the link to grab a time: https://api.leadconnectorhq.com/widget/bookings/clarity-call-21dc`
+};
+
+// ── Onboarding filters ────────────────────────────────────
+function getOnboardingNoEverfit() {
+  return participants.filter(p => {
+    const sd = p.sheetData || {};
+    const purchased = sd['Date Purchased'] || p.createdAt;
+    if (!purchased) return false;
+    const hrsSincePurchase = (Date.now() - new Date(purchased).getTime()) / 3600000;
+    if (hrsSincePurchase < 24) return false;
+    if (sd['Login to Everfit']) return false;
+    const dmSent = sd['Everfit DM Sent'];
+    if (dmSent) {
+      const hrsSinceDm = (Date.now() - new Date(dmSent).getTime()) / 3600000;
+      if (hrsSinceDm < 24) return false;
+    }
+    return true;
+  }).sort((a, b) => {
+    const ap = new Date((a.sheetData && a.sheetData['Date Purchased']) || a.createdAt).getTime();
+    const bp = new Date((b.sheetData && b.sheetData['Date Purchased']) || b.createdAt).getTime();
+    return ap - bp;  // older purchase first (more urgent)
+  });
+}
+
+function getOnboardingNoSchedule() {
+  return participants.filter(p => {
+    const sd = p.sheetData || {};
+    const purchased = sd['Date Purchased'] || p.createdAt;
+    if (!purchased) return false;
+    const hrsSincePurchase = (Date.now() - new Date(purchased).getTime()) / 3600000;
+    if (hrsSincePurchase < 48) return false;
+    if (sd['CC Scheduled']) return false;
+    if (p.stageName !== 'Participant') return false;
+    const dmSent = sd['Schedule DM Sent'];
+    if (dmSent) {
+      const hrsSinceDm = (Date.now() - new Date(dmSent).getTime()) / 3600000;
+      if (hrsSinceDm < 24) return false;
+    }
+    return true;
+  }).sort((a, b) => {
+    const ap = new Date((a.sheetData && a.sheetData['Date Purchased']) || a.createdAt).getTime();
+    const bp = new Date((b.sheetData && b.sheetData['Date Purchased']) || b.createdAt).getTime();
+    return ap - bp;
+  });
+}
+
+function getOnboardingCount() {
+  return getOnboardingNoEverfit().length + getOnboardingNoSchedule().length;
+}
+
+// ── Accountability filters ────────────────────────────────
+// Threshold: 48h from latest outreach event. Flags stale cases.
+function getDennisFlags() {
+  const flags = [];
+  participants.forEach(p => {
+    const sd    = p.sheetData || {};
+    const hrs   = (p.stageAgeMs || 0) / 3600000;
+    const stage = p.stageName;
+
+    // Participant past Day 4 + 25h with no CC scheduled
+    if (stage === 'Participant' && hrs >= 121) {
+      flags.push({ p, issue: 'Past Day 4 without scheduling CC', hrs });
+      return;
+    }
+
+    const isProblematic = ['CC - Cancelled', 'CC - No Show',
+                           'DC - Cancelled', 'DC - No Show'].includes(stage);
+    if (!isProblematic) return;
+
+    // Case closed if Offer Doc sent
+    if (sd['Offer Doc Sent']) return;
+
+    // Find latest outreach action
+    const outreachCols = ['Reschedule DM Sent', 'Call #1', 'Call #2'];
+    let latestTs = 0;
+    let latestCol = null;
+    outreachCols.forEach(col => {
+      if (sd[col]) {
+        const t = new Date(sd[col]).getTime();
+        if (t > latestTs) { latestTs = t; latestCol = col; }
+      }
+    });
+
+    if (!latestCol) {
+      // No outreach started + 48h+ since stage change
+      if (hrs >= 48) {
+        flags.push({ p, issue: stage + ' — no outreach started', hrs });
+      }
+      return;
+    }
+
+    const hrsSince = (Date.now() - latestTs) / 3600000;
+    if (hrsSince < 48) return;  // still within buffer
+
+    const nextStep = latestCol === 'Reschedule DM Sent' ? 'Call #1' :
+                     latestCol === 'Call #1' ? 'Call #2' :
+                     latestCol === 'Call #2' ? 'Offer Doc' : 'follow-up';
+    flags.push({ p, issue: latestCol + ' done — ' + nextStep + ' overdue', hrs: hrsSince });
+  });
+  return flags.sort((a, b) => b.hrs - a.hrs);
+}
+
+function getJackieFlags() {
+  const flags = [];
+  participants.forEach(p => {
+    const sd = p.sheetData || {};
+    const purchased = sd['Date Purchased'] || p.createdAt;
+    if (!purchased) return;
+    const hrsSincePurchase = (Date.now() - new Date(purchased).getTime()) / 3600000;
+
+    // Purchased > 48h without Everfit Login
+    if (hrsSincePurchase >= 48 && !sd['Login to Everfit']) {
+      const dmSent = sd['Everfit DM Sent'];
+      // Flag if DM never sent, or DM sent >48h ago without result
+      const dmStale = !dmSent ||
+        ((Date.now() - new Date(dmSent).getTime()) / 3600000) >= 48;
+      if (dmStale) {
+        flags.push({ p, issue: 'No Everfit login + outreach stale', hrs: hrsSincePurchase });
+      }
+    }
+  });
+  return flags.sort((a, b) => b.hrs - a.hrs);
+}
+
+function getAccountabilityCount() {
+  return getDennisFlags().length + getJackieFlags().length;
+}
+
+function getFirstName(p) {
+  if (p.sheetData && p.sheetData['First Name']) return p.sheetData['First Name'];
+  return (p.name || '').trim().split(/\s+/)[0] || 'there';
+}
+
+function daysSincePurchase(p) {
+  const sd = p.sheetData || {};
+  const purchased = sd['Date Purchased'] || p.createdAt;
+  if (!purchased) return 0;
+  return Math.floor((Date.now() - new Date(purchased).getTime()) / 86400000);
+}
+
+// Suggested action based on stage + time. Returns null if no action needed.
+
+// Suggested action — uses explicit outreach tracking (Reschedule DM,
+// Call #1, Call #2, Offer Doc). Hides participants when Dennis is
+// waiting for the cadence interval to elapse.
+function suggestedAction(p) {
+  const sd    = p.sheetData || {};
+  const hrs   = (p.stageAgeMs || 0) / 3600000;
+  const stage = p.stageName;
+
+  // Past day 4 of challenge still in Participant
+  if (stage === 'Participant') {
+    if (hrs > 96) return { label: 'Call to schedule CC', tone: 'urgent' };
+    return null;
+  }
+
+  // Missed/cancelled CC or DC → escalation cadence
+  if (stage === 'CC - Cancelled' || stage === 'CC - No Show' ||
+      stage === 'DC - Cancelled' || stage === 'DC - No Show') {
+
+    if (sd['Offer Doc Sent']) return null;  // case closed
+
+    if (!sd['Reschedule DM Sent']) {
+      return { label: 'Send Reschedule DM', tone: hrs > 48 ? 'late' : '' };
+    }
+
+    const hrsSinceDM = (Date.now() - new Date(sd['Reschedule DM Sent']).getTime()) / 3600000;
+    if (hrsSinceDM < 24) return null;  // waiting for response
+
+    if (!sd['Call #1']) {
+      return { label: 'Call #1', tone: hrsSinceDM > 48 ? 'late' : '' };
+    }
+
+    const hrsSinceCall1 = (Date.now() - new Date(sd['Call #1']).getTime()) / 3600000;
+    if (hrsSinceCall1 < 24) return null;
+
+    if (!sd['Call #2']) {
+      return { label: 'Call #2', tone: hrsSinceCall1 > 48 ? 'late' : '' };
+    }
+
+    const hrsSinceCall2 = (Date.now() - new Date(sd['Call #2']).getTime()) / 3600000;
+    if (hrsSinceCall2 < 24) return null;
+
+    return { label: 'Send Offer Doc', tone: 'urgent' };
+  }
+
+  return null;
+}
+
+function getActionQueue() {
+  return participants
+    .map(p => ({ p, action: suggestedAction(p) }))
+    .filter(x => x.action !== null)
+    .sort((a, b) => b.p.stageAgeMs - a.p.stageAgeMs);
+}
+
+// ── Load data ─────────────────────────────────────────────
+// Two-phase load: fast lite fetch (no notes) → render immediately.
+// Then background full fetch updates last-note previews.
+async function loadData() {
+  setState('loading');
+  const btn = document.getElementById('refresh-btn');
+  btn.disabled = true;
+  historicalLoaded = false;  // invalidate cache so History view refetches next time
+  try {
+    const res  = await fetch(SCRIPT_URL + '?action=getOpportunities&lite=true');
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Unknown error');
+
+    participants = json.data.map(enrich);
+    renderStats();
+    renderFilters();
+    renderTable();
+    document.getElementById('stats-bar').style.display = 'flex';
+    document.getElementById('header-meta').textContent =
+      'Active challenge · ' + participants.length + ' participants';
+    document.getElementById('last-updated').textContent =
+      'Updated ' + new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+
+    // Phase 2: background fetch full data with notes
+    loadNotesInBackground();
+  } catch(err) {
+    setState('error');
+    document.getElementById('error-msg').textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function loadNotesInBackground() {
+  try {
+    const res  = await fetch(SCRIPT_URL + '?action=getOpportunities');
+    const json = await res.json();
+    if (!json.success) return;
+    // Merge notes into existing participants (preserves any optimistic updates).
+    json.data.forEach(d => {
+      const p = participants.find(x => x.contactId === d.contactId);
+      if (p) {
+        p.allNotes = d.allNotes || [];
+        p.lastNote = d.lastNote || null;
+      }
+    });
+    // Re-render current view to surface lastNote previews.
+    if (activeView === 'tracker' || activeView === 'queue') renderTable();
+  } catch(err) {
+    console.warn('Background notes load failed:', err);
+  }
+}
+
+function enrich(p) {
+  const now = Date.now();
+  // Compute real stageChangedAt from the most recent stage timestamp in the sheet.
+  // Falls back to Date Purchased, then opp.createdAt.
+  p.stageChangedAt = computeStageChangedAt(p);
+  p.stageAgeMs = now - new Date(p.stageChangedAt).getTime();
+  p.stageAge   = p.stageAgeMs;
+  p.everfitLogin      = !!p.everfitLogin;
+  p.kickoffRegistrado = !!p.kickoffRegistered;
+  return p;
+}
+
+// stageChangedAt = latest timestamp among any stage-related column in the sheet.
+// If none, fall back to Date Purchased (sheet) or opp.createdAt (GHL).
+function computeStageChangedAt(p) {
+  const sd = p.sheetData || {};
+  const stageCols = [
+    'Purchase 101', 'Purchase GC', "Didn't Purchase",
+    'DC No Show', 'DC Cancelled', 'DC Scheduled',
+    'CC No Show', 'CC Cancelled', 'CC Scheduled'
+  ];
+  let latest = 0;
+  for (const col of stageCols) {
+    const v = sd[col];
+    if (!v) continue;
+    const t = new Date(v).getTime();
+    if (!isNaN(t) && t > latest) latest = t;
+  }
+  if (latest) return new Date(latest).toISOString();
+  if (sd['Date Purchased']) {
+    const t = new Date(sd['Date Purchased']).getTime();
+    if (!isNaN(t)) return new Date(t).toISOString();
+  }
+  return p.createdAt || new Date().toISOString();
+}
+
+// ── Stats ─────────────────────────────────────────────────
+function renderStats() {
+  const d = participants;
+  document.getElementById('s-total').textContent       = d.length;
+  document.getElementById('s-participant').textContent  = d.filter(p=>p.stageName==='Participant').length;
+  document.getElementById('s-cc').textContent           = d.filter(p=>p.stageName==='CC - Scheduled').length;
+  document.getElementById('s-dc').textContent           = d.filter(p=>p.stageName==='DC - Scheduled').length;
+  document.getElementById('s-purchase').textContent     = d.filter(p=>p.stageName.startsWith('Purchase')).length;
+}
+
+// ── Filters ───────────────────────────────────────────────
+function renderFilters() {
+  // Update tab counts
+  document.getElementById('queue-count').textContent          = getActionQueue().length;
+  document.getElementById('onboarding-count').textContent     = getOnboardingCount();
+  document.getElementById('accountability-count').textContent = getAccountabilityCount();
+
+  // Filters only show in tracker view
+  if (activeView !== 'tracker') {
+    document.getElementById('filter-bar').innerHTML = '';
+    return;
+  }
+
+  document.getElementById('filter-bar').innerHTML = FILTERS.map(f => {
+    const count = f.stages
+      ? participants.filter(p=>f.stages.includes(p.stageName)).length
+      : participants.length;
+    if (count === 0 && f.id !== 'all') return '';
+    return `<button class="filter-chip${activeFilter===f.id?' active':''}"
+      onclick="setFilter('${f.id}')">${f.label}<span class="filter-count">${count}</span></button>`;
+  }).join('');
+}
+
+function setFilter(id) {
+  activeFilter = id;
+  renderFilters();
+  renderTable();
+}
+
+// ── Sort ──────────────────────────────────────────────────
+function sortBy(key) {
+  if (sortKey === key) { sortDir *= -1; }
+  else { sortKey = key; sortDir = key==='stageAge' ? -1 : 1; }
+  updateSortHeaders();
+  renderTable();
+}
+
+function updateSortHeaders() {
+  ['name','stage','time'].forEach(k => {
+    const el = document.getElementById('th-'+k);
+    if (el) { el.className = ''; }
+  });
+  const map = { name:'th-name', stageName:'th-stage', stageAge:'th-time' };
+  const el = document.getElementById(map[sortKey]);
+  if (el) el.className = sortDir === 1 ? 'sort-asc' : 'sort-desc';
+}
+
+function getFiltered() {
+  const f = FILTERS.find(x=>x.id===activeFilter);
+  let list = f && f.stages
+    ? participants.filter(p=>f.stages.includes(p.stageName))
+    : [...participants];
+
+  list.sort((a,b) => {
+    let av = a[sortKey], bv = b[sortKey];
+    if (typeof av==='string') av=av.toLowerCase();
+    if (typeof bv==='string') bv=bv.toLowerCase();
+    return av<bv ? -sortDir : av>bv ? sortDir : 0;
+  });
+  return list;
+}
+
+// ── Table ─────────────────────────────────────────────────
+function renderTable() {
+  if (activeView === 'queue') return renderQueueTable();
+  return renderTrackerTable();
+}
+
+function renderTrackerTable() {
+  const list = getFiltered();
+  // Restore default headers
+  document.getElementById('th-name').textContent  = 'Participant';
+  document.getElementById('th-stage').textContent = 'Stage';
+  document.getElementById('th-time').textContent  = 'Time in stage';
+  document.querySelectorAll('#data-table thead th')[4].textContent = 'Indicators';
+  document.querySelectorAll('#data-table thead th')[5].textContent = 'Last note';
+
+  if (list.length === 0) { setState('empty'); return; }
+  setState('table');
+
+  document.getElementById('tbody').innerHTML = list.map(p => {
+    const st  = STAGE_STYLE[p.stageName] || {bg:'#f1f5f9',text:'#475569',dot:'#94a3b8'};
+    const ini = initials(p.name);
+    const clr = nameColor(p.name);
+    const timeClass = p.stageAgeMs > 72*3600000 ? 'danger'
+                    : p.stageAgeMs > 48*3600000 ? 'warn' : '';
+    const lastNote = p.lastNote;
+
+    return `<tr onclick="openModal('${p.contactId}')">
+      <td><div class="avatar" style="background:${clr}">${ini}</div></td>
+      <td>
+        <div class="contact-name">${esc(p.name)}</div>
+        <div class="contact-email">${esc(p.email||'')}</div>
+      </td>
+      <td class="hide-sm">
+        <span class="stage-badge" style="background:${st.bg};color:${st.text}">
+          <span class="stage-dot" style="background:${st.dot}"></span>
+          ${esc(p.stageName)}
+        </span>
+      </td>
+      <td><span class="time-cell ${timeClass}">${fmtDuration(p.stageAgeMs)}</span></td>
+      <td class="hide-sm">
+        <div class="indicators">
+          <span class="ind ${p.everfitLogin?'ind-yes':'ind-no'}">${p.everfitLogin?'✓':'✗'} Everfit</span>
+          <span class="ind ${p.kickoffRegistrado?'ind-yes':'ind-no'}">${p.kickoffRegistrado?'✓':'✗'} Kickoff</span>
+        </div>
+      </td>
+      <td class="hide-sm note-preview-cell">
+        ${lastNote
+          ? `<div class="note-text">${esc(stripHtml(lastNote.body))}</div>
+             <div class="note-ago">${timeAgo(lastNote.dateAdded)}</div>`
+          : (p.allNotes === undefined
+              ? `<div class="note-empty" style="opacity:0.5">Loading…</div>`
+              : `<div class="note-empty">No notes</div>`)}
+      </td>
+      <td>
+        <button class="btn btn-ghost btn-sm"
+          onclick="event.stopPropagation();openModal('${p.contactId}')">+ Note</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderQueueTable() {
+  const queue = getActionQueue();
+
+  // Change headers for queue context
+  document.getElementById('th-name').textContent  = 'Participant';
+  document.getElementById('th-stage').textContent = 'Stage';
+  document.getElementById('th-time').textContent  = 'Time in stage';
+  document.querySelectorAll('#data-table thead th')[4].textContent = 'Suggested action';
+  document.querySelectorAll('#data-table thead th')[5].textContent = 'Last note';
+
+  if (queue.length === 0) {
+    setState('table');
+    document.getElementById('tbody').innerHTML = `
+      <tr><td colspan="7">
+        <div class="queue-empty">
+          <div class="queue-empty-emoji">✨</div>
+          <div>Nothing to do right now. Everyone is on track.</div>
+        </div>
+      </td></tr>`;
+    return;
+  }
+
+  setState('table');
+  document.getElementById('tbody').innerHTML = queue.map(({ p, action }) => {
+    const st  = STAGE_STYLE[p.stageName] || {bg:'#f1f5f9',text:'#475569',dot:'#94a3b8'};
+    const ini = initials(p.name);
+    const clr = nameColor(p.name);
+    const timeClass = p.stageAgeMs > 72*3600000 ? 'danger'
+                    : p.stageAgeMs > 48*3600000 ? 'warn' : '';
+    const lastNote = p.lastNote;
+
+    return `<tr onclick="openModal('${p.contactId}')">
+      <td><div class="avatar" style="background:${clr}">${ini}</div></td>
+      <td>
+        <div class="contact-name">${esc(p.name)}</div>
+        <div class="contact-email">${esc(p.email||'')}</div>
+      </td>
+      <td class="hide-sm">
+        <span class="stage-badge" style="background:${st.bg};color:${st.text}">
+          <span class="stage-dot" style="background:${st.dot}"></span>
+          ${esc(p.stageName)}
+        </span>
+      </td>
+      <td><span class="time-cell ${timeClass}">${fmtDuration(p.stageAgeMs)}</span></td>
+      <td class="hide-sm">
+        <span class="suggested-action ${action.tone}">${esc(action.label)}</span>
+      </td>
+      <td class="hide-sm note-preview-cell">
+        ${lastNote
+          ? `<div class="note-text">${esc(stripHtml(lastNote.body))}</div>
+             <div class="note-ago">${timeAgo(lastNote.dateAdded)}</div>`
+          : (p.allNotes === undefined
+              ? `<div class="note-empty" style="opacity:0.5">Loading…</div>`
+              : `<div class="note-empty">No notes</div>`)}
+      </td>
+      <td>
+        <button class="btn btn-ghost btn-sm"
+          onclick="event.stopPropagation();openModal('${p.contactId}')">+ Note</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── History (Vista 5B) ────────────────────────────────────
+let historicalData = null;
+let historicalLoaded = false;
+
+async function renderHistory() {
+  document.getElementById('state-loading').style.display = 'none';
+  document.getElementById('state-error').style.display   = 'none';
+  document.getElementById('state-empty').style.display   = 'none';
+  document.getElementById('data-table').style.display    = 'none';
+  document.getElementById('history-wrap').style.display  = 'block';
+
+  const wrap = document.getElementById('history-wrap');
+
+  if (!historicalLoaded) {
+    wrap.innerHTML = `<div class="hist-empty">
+      <div class="hist-empty-emoji">⏳</div>
+      <div class="hist-empty-text">Loading history…</div>
+    </div>`;
+    try {
+      const res  = await fetch(SCRIPT_URL + '?action=getHistorical');
+      const json = await res.json();
+      historicalData = json.success ? (json.data || []) : [];
+    } catch(err) {
+      historicalData = [];
+    }
+    historicalLoaded = true;
+  }
+
+  if (!historicalData || historicalData.length === 0) {
+    wrap.innerHTML = `<div class="hist-empty">
+      <div class="hist-empty-emoji">📚</div>
+      <div class="hist-empty-text">No archived challenges yet.</div>
+      <div class="hist-empty-sub">When you archive the current challenge to the Historical sheet, comparisons will appear here.</div>
+    </div>`;
+    return;
+  }
+
+  const rows = historicalData.map(c => {
+    const pct = (n, d) => d ? Math.round((n / d) * 100) + '%' : '—';
+    return `<tr>
+      <td><span class="hist-challenge">${esc(c.challenge)}</span></td>
+      <td>${c.total}</td>
+      <td>${c.attendedCC}<span class="hist-pct">${pct(c.attendedCC, c.total)}</span></td>
+      <td>${c.attendedDC}<span class="hist-pct">${pct(c.attendedDC, c.total)}</span></td>
+      <td>${c.purchased}<span class="hist-pct">${pct(c.purchased, c.total)}</span></td>
+      <td>${c.purchase101 || 0}</td>
+      <td>${c.purchaseGC || 0}</td>
+      <td class="hist-revenue">${fmtMoney(c.totalRev || 0)}</td>
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <table class="hist-table">
+      <thead>
+        <tr>
+          <th>Challenge</th>
+          <th>Enrolled</th>
+          <th>Attended CC</th>
+          <th>Attended DC</th>
+          <th>Purchased</th>
+          <th>1-on-1</th>
+          <th>GC</th>
+          <th>Total revenue</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+// ── Onboarding view ───────────────────────────────────────
+function renderOnboarding() {
+  // Hide other table-related views
+  document.getElementById('state-loading').style.display = 'none';
+  document.getElementById('state-error').style.display   = 'none';
+  document.getElementById('state-empty').style.display   = 'none';
+  document.getElementById('data-table').style.display    = 'none';
+  document.getElementById('onboarding-wrap').style.display = 'block';
+
+  const noEverfit  = getOnboardingNoEverfit();
+  const noSchedule = getOnboardingNoSchedule();
+
+  document.getElementById('onboarding-wrap').innerHTML = `
+    <div class="ob-section">
+      <div class="ob-section-header">
+        <span class="ob-section-title">No Everfit Login</span>
+        <span class="ob-section-count">${noEverfit.length}</span>
+      </div>
+      <div class="ob-section-desc">Participants who purchased 24h+ ago and haven't logged into Everfit yet.</div>
+      ${noEverfit.length === 0
+        ? `<div class="ob-empty">✨ Everyone is logged into Everfit.</div>`
+        : `<div class="ob-list">${noEverfit.map(p => renderOnboardingCard(p, 'everfit')).join('')}</div>`}
+    </div>
+
+    <div class="ob-section">
+      <div class="ob-section-header">
+        <span class="ob-section-title">No Clarity Call Scheduled</span>
+        <span class="ob-section-count">${noSchedule.length}</span>
+      </div>
+      <div class="ob-section-desc">Participants 48h+ since purchase without a Clarity Call scheduled.</div>
+      ${noSchedule.length === 0
+        ? `<div class="ob-empty">✨ Everyone has a CC scheduled.</div>`
+        : `<div class="ob-list">${noSchedule.map(p => renderOnboardingCard(p, 'schedule')).join('')}</div>`}
+    </div>
+  `;
+}
+
+function renderOnboardingCard(p, type) {
+  const ini = initials(p.name);
+  const clr = nameColor(p.name);
+  const days = daysSincePurchase(p);
+  const daysLabel = days === 0 ? 'today' : days === 1 ? '1 day ago' : `${days} days ago`;
+
+  return `
+    <div class="ob-card">
+      <div class="avatar" style="background:${clr}">${ini}</div>
+      <div class="ob-card-info">
+        <div class="ob-card-name">${esc(p.name)}</div>
+        <div class="ob-card-meta">${esc(p.email || '')} · Purchased ${daysLabel}</div>
+      </div>
+      <div class="ob-actions">
+        <button class="ob-btn ob-btn-primary" onclick="copyOnboardingMessage('${p.contactId}', '${type}', this)">Copy message</button>
+        <button class="ob-btn ob-btn-success" onclick="markOnboardingSent('${p.contactId}', '${type}', this)">Mark sent</button>
+      </div>
+    </div>`;
+}
+
+async function copyOnboardingMessage(contactId, type, btn) {
+  const p = participants.find(x => x.contactId === contactId);
+  if (!p) return;
+  const msg = MESSAGE_TEMPLATES[type](getFirstName(p));
+  try {
+    await navigator.clipboard.writeText(msg);
+    const original = btn.textContent;
+    btn.textContent = '✓ Copied';
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1500);
+  } catch(err) {
+    alert('Could not copy: ' + err.message);
+  }
+}
+
+async function markOnboardingSent(contactId, type, btn) {
+  const p = participants.find(x => x.contactId === contactId);
+  if (!p) return;
+
+  const columnName = type === 'everfit' ? 'Everfit DM Sent' : 'Schedule DM Sent';
+  const nowIso = new Date().toISOString();
+  const nameParts = (p.name || '').trim().split(/\s+/);
+
+  if (!p.sheetData) p.sheetData = {};
+  const prev = p.sheetData[columnName];
+  p.sheetData[columnName] = nowIso;
+
+  btn.disabled = true;
+  btn.textContent = '✓ Sent';
+
+  setTimeout(() => { renderOnboarding(); renderFilters(); }, 700);
+
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'recordEvent',
+        email: p.email,
+        column: columnName,
+        firstName: nameParts[0] || '',
+        lastName: nameParts.slice(1).join(' ') || '',
+        timestamp: nowIso
+      })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Save error');
+  } catch(err) {
+    p.sheetData[columnName] = prev;
+    renderOnboarding();
+    renderFilters();
+    alert('Could not save: ' + err.message);
+  }
+}
+
+// ── Accountability view ───────────────────────────────────
+function renderAccountability() {
+  document.getElementById('state-loading').style.display = 'none';
+  document.getElementById('state-error').style.display   = 'none';
+  document.getElementById('state-empty').style.display   = 'none';
+  document.getElementById('data-table').style.display    = 'none';
+  document.getElementById('accountability-wrap').style.display = 'block';
+
+  const dennis = getDennisFlags();
+  const jackie = getJackieFlags();
+
+  document.getElementById('accountability-wrap').innerHTML = `
+    <div class="acc-section">
+      <div class="acc-section-header">
+        <span class="acc-section-title">Dennis — open follow-ups</span>
+        <span class="acc-section-count${dennis.length === 0 ? ' zero' : ''}">${dennis.length}</span>
+      </div>
+      <div class="acc-section-desc">CC/DC issues or Participants past Day 4 with no resolution in 48h+.</div>
+      ${dennis.length === 0
+        ? `<div class="acc-empty">✓ Dennis is on top of everything.</div>`
+        : `<div class="acc-list">${dennis.map(renderAccCard).join('')}</div>`}
+    </div>
+
+    <div class="acc-section">
+      <div class="acc-section-header">
+        <span class="acc-section-title">Jackie — open follow-ups</span>
+        <span class="acc-section-count${jackie.length === 0 ? ' zero' : ''}">${jackie.length}</span>
+      </div>
+      <div class="acc-section-desc">Onboarding outreach stale 48h+ (Everfit login still missing).</div>
+      ${jackie.length === 0
+        ? `<div class="acc-empty">✓ Jackie is on top of everything.</div>`
+        : `<div class="acc-list">${jackie.map(renderAccCard).join('')}</div>`}
+    </div>
+  `;
+}
+
+function renderAccCard({ p, issue, hrs }) {
+  const ini = initials(p.name);
+  const clr = nameColor(p.name);
+  return `
+    <div class="acc-card" onclick="openModal('${p.contactId}')">
+      <div class="avatar" style="background:${clr}">${ini}</div>
+      <div class="acc-card-info">
+        <div class="acc-card-name">${esc(p.name)}</div>
+        <div class="acc-card-issue">${esc(issue)}</div>
+      </div>
+      <div class="acc-card-time">${fmtDuration(hrs * 3600000)}</div>
+    </div>`;
+}
+
+// ── Analytics view ────────────────────────────────────────
+function computeFunnel() {
+  const total = participants.length;
+  let bookedCC = 0, attendedCC = 0, bookedDC = 0, attendedDC = 0;
+  let purchase101Count = 0, purchaseGCCount = 0;
+  let purchase101Revenue = 0, purchaseGCRevenue = 0;
+  let challengeRevenue = 0;
+
+  const attendedCCStages = ['DC - Scheduled', 'DC - Cancelled', 'DC - No Show',
+                            "Didn't Purchase", 'Purchase 101', 'Purchase GC'];
+  const attendedDCStages = ["Didn't Purchase", 'Purchase 101', 'Purchase GC'];
+
+  participants.forEach(p => {
+    const sd = p.sheetData || {};
+    challengeRevenue += parseFloat(sd['$ Package']) || 0;
+    if (sd['CC Scheduled']) bookedCC++;
+    if (attendedCCStages.includes(p.stageName)) attendedCC++;
+    if (sd['DC Scheduled']) bookedDC++;
+    if (attendedDCStages.includes(p.stageName)) attendedDC++;
+    if (sd['Purchase 101']) {
+      purchase101Count++;
+      purchase101Revenue += parseFloat(sd['Purchase 101 Amount']) || 0;
+    }
+    if (sd['Purchase GC']) {
+      purchaseGCCount++;
+      purchaseGCRevenue += parseFloat(sd['Purchase GC Amount']) || 0;
+    }
+  });
+
+  const purchased = purchase101Count + purchaseGCCount;
+  return {
+    total, bookedCC, attendedCC, bookedDC, attendedDC, purchased,
+    purchase101Count, purchaseGCCount,
+    purchase101Revenue, purchaseGCRevenue, challengeRevenue,
+    totalRevenue: challengeRevenue + purchase101Revenue + purchaseGCRevenue
+  };
+}
+
+function pct(n, d) {
+  if (!d) return '—';
+  return Math.round((n / d) * 100) + '%';
+}
+
+function fmtMoney(amount) {
+  return '$' + (amount || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function renderAnalytics() {
+  document.getElementById('state-loading').style.display = 'none';
+  document.getElementById('state-error').style.display   = 'none';
+  document.getElementById('state-empty').style.display   = 'none';
+  document.getElementById('data-table').style.display    = 'none';
+  document.getElementById('analytics-wrap').style.display = 'grid';
+
+  const f = computeFunnel();
+
+  const funnelStep = (label, value) => `
+    <div class="funnel-step">
+      <span class="funnel-step-label">${label}</span>
+      <span class="funnel-step-value">${value}</span>
+    </div>`;
+
+  const connector = (from, to) => `
+    <div class="funnel-connector">
+      <span class="funnel-connector-arrow">↓</span>
+      <span class="funnel-connector-pct">${pct(to, from)}</span>
+      <span>converted</span>
+    </div>`;
+
+  document.getElementById('analytics-wrap').innerHTML = `
+    <div class="an-card">
+      <div class="an-card-title">Funnel — Active Challenge</div>
+      ${funnelStep('Total enrolled',  f.total)}
+      ${connector(f.total, f.bookedCC)}
+      ${funnelStep('Scheduled CC',    f.bookedCC)}
+      ${connector(f.bookedCC, f.attendedCC)}
+      ${funnelStep('Attended CC',     f.attendedCC)}
+      ${connector(f.attendedCC, f.bookedDC)}
+      ${funnelStep('Scheduled DC',    f.bookedDC)}
+      ${connector(f.bookedDC, f.attendedDC)}
+      ${funnelStep('Attended DC',     f.attendedDC)}
+      ${connector(f.attendedDC, f.purchased)}
+      ${funnelStep('Purchased',       f.purchased)}
+    </div>
+
+    <div>
+      <div class="an-card" style="margin-bottom:24px">
+        <div class="an-card-title">Revenue</div>
+        <div class="an-row">
+          <div>
+            <span class="an-row-label">Challenge</span>
+            <span class="an-row-meta">${f.total} participants</span>
+          </div>
+          <span class="an-row-value">${fmtMoney(f.challengeRevenue)}</span>
+        </div>
+        <div class="an-row">
+          <div>
+            <span class="an-row-label">1-on-1 upgrades</span>
+            <span class="an-row-meta">${f.purchase101Count} purchase${f.purchase101Count===1?'':'s'}</span>
+          </div>
+          <span class="an-row-value">${fmtMoney(f.purchase101Revenue)}</span>
+        </div>
+        <div class="an-row">
+          <div>
+            <span class="an-row-label">Group Coaching upgrades</span>
+            <span class="an-row-meta">${f.purchaseGCCount} purchase${f.purchaseGCCount===1?'':'s'}</span>
+          </div>
+          <span class="an-row-value">${fmtMoney(f.purchaseGCRevenue)}</span>
+        </div>
+        <div class="an-row an-row-total">
+          <span class="an-row-label">Total revenue</span>
+          <span class="an-row-value">${fmtMoney(f.totalRevenue)}</span>
+        </div>
+      </div>
+
+      <div class="an-card">
+        <div class="an-card-title">Product Breakdown</div>
+        <div class="an-row">
+          <div>
+            <span class="an-row-label">1-on-1</span>
+            <span class="an-row-meta">${pct(f.purchase101Count, f.attendedDC)} of attended DC</span>
+          </div>
+          <span class="an-row-value">${f.purchase101Count}</span>
+        </div>
+        <div class="an-row">
+          <div>
+            <span class="an-row-label">Group Coaching</span>
+            <span class="an-row-meta">${pct(f.purchaseGCCount, f.attendedDC)} of attended DC</span>
+          </div>
+          <span class="an-row-value">${f.purchaseGCCount}</span>
+        </div>
+        <div class="an-row">
+          <div>
+            <span class="an-row-label">Didn't purchase</span>
+            <span class="an-row-meta">${pct(f.attendedDC - f.purchased, f.attendedDC)} of attended DC</span>
+          </div>
+          <span class="an-row-value">${f.attendedDC - f.purchased}</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+
+// ── Modal ─────────────────────────────────────────────────
+async function openModal(contactId) {
+  const p = participants.find(x=>x.contactId===contactId);
+  if (!p) return;
+  activeContact = p;
+
+  const st = STAGE_STYLE[p.stageName] || {bg:'#f1f5f9',text:'#475569',dot:'#94a3b8'};
+
+  document.getElementById('m-name').textContent = p.name;
+  document.getElementById('m-sub').textContent  = [p.email, p.phone].filter(Boolean).join(' · ') || '—';
+
+  document.getElementById('m-stage').innerHTML =
+    `<span class="stage-badge" style="background:${st.bg};color:${st.text}">
+      <span class="stage-dot" style="background:${st.dot}"></span>${esc(p.stageName)}</span>`;
+
+  document.getElementById('m-time').textContent    = fmtDuration(p.stageAgeMs);
+  document.getElementById('m-email').textContent   = p.email  || '—';
+  document.getElementById('m-phone').textContent   = p.phone  || '—';
+  document.getElementById('m-everfit').innerHTML   = indBadge(p.everfitLogin);
+  document.getElementById('m-kickoff').innerHTML   = indBadge(p.kickoffRegistrado);
+
+  document.getElementById('note-input').value = '';
+  document.getElementById('note-saved').style.display = 'none';
+  document.getElementById('note-btn').disabled = false;
+  document.getElementById('note-btn').textContent = 'Save note';
+
+  document.getElementById('overlay').classList.add('open');
+
+  // Notes: render immediately if loaded; otherwise fetch lazily.
+  if (p.allNotes !== undefined) {
+    renderNotes(p.allNotes);
+  } else {
+    renderNotes([], true);  // loading state
+    try {
+      const res = await fetch(SCRIPT_URL + '?action=getContact&contactId=' + encodeURIComponent(contactId));
+      const json = await res.json();
+      if (json.success) {
+        p.allNotes = (json.data.notes || []).map(n => ({
+          id: n.id, body: n.body, dateAdded: n.dateAdded
+        }));
+        p.lastNote = p.allNotes[0] || null;
+        // Only re-render if user is still viewing this contact.
+        if (activeContact && activeContact.contactId === contactId) {
+          renderNotes(p.allNotes);
+        }
+      }
+    } catch(err) {
+      console.warn('Failed to load notes:', err);
+      if (activeContact && activeContact.contactId === contactId) {
+        renderNotes([]);
+      }
+    }
+  }
+}
+
+function indBadge(yes) {
+  return yes
+    ? '<span class="ind ind-yes">✓ Yes</span>'
+    : '<span class="ind ind-no">✗ No</span>';
+}
+
+function renderNotes(notes, loading) {
+  document.getElementById('m-notes-count').textContent = loading ? '…' : notes.length;
+  const el = document.getElementById('notes-list');
+  if (loading) {
+    el.innerHTML = '<div class="no-notes-msg">Loading notes…</div>';
+    return;
+  }
+  if (!notes.length) {
+    el.innerHTML = '<div class="no-notes-msg">No notes recorded.</div>';
+    return;
+  }
+  el.innerHTML = notes.map(n => `
+    <div class="note-card">
+      <div class="note-card-body">${esc(stripHtml(n.body||''))}</div>
+      <div class="note-card-meta">${timeAgo(n.dateAdded)}</div>
+    </div>`).join('');
+}
+
+function closeModal() {
+  document.getElementById('overlay').classList.remove('open');
+  activeContact = null;
+}
+
+function onOverlayClick(e) {
+  if (e.target === document.getElementById('overlay')) closeModal();
+}
+
+// ── Save note ─────────────────────────────────────────────
+async function saveNote() {
+  if (!activeContact) return;
+  const body = document.getElementById('note-input').value.trim();
+  if (!body) return;
+
+  const btn = document.getElementById('note-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    const res  = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action:'createNote', contactId: activeContact.contactId, body })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Save error');
+
+    // Optimistic update — only notes change here.
+    const newNote = { id: String(Date.now()), body, dateAdded: new Date().toISOString() };
+    activeContact.allNotes.unshift(newNote);
+    activeContact.lastNote = newNote;
+
+    renderNotes(activeContact.allNotes);
+    renderTable();
+
+    document.getElementById('note-saved').style.display = 'inline';
+    document.getElementById('note-input').value = '';
+    btn.textContent = 'Save note';
+    btn.disabled = false;
+    setTimeout(()=>{ document.getElementById('note-saved').style.display='none'; }, 3000);
+
+  } catch(err) {
+    btn.textContent = 'Error — Retry';
+    btn.disabled = false;
+  }
+}
+
+// ── UI state machine ──────────────────────────────────────
+function setState(s) {
+  document.getElementById('state-loading').style.display = s==='loading' ? 'block' : 'none';
+  document.getElementById('state-error').style.display   = s==='error'   ? 'block' : 'none';
+  document.getElementById('state-empty').style.display   = s==='empty'   ? 'block' : 'none';
+  document.getElementById('data-table').style.display    = s==='table'   ? 'table' : 'none';
+}
+
+// ── Helpers ───────────────────────────────────────────────
+function initials(name) {
+  return (name||'?').split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
+}
+
+const COLORS = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#14b8a6','#f97316','#84cc16'];
+function nameColor(name) {
+  let h = 0;
+  for (let i=0; i<name.length; i++) h = name.charCodeAt(i) + ((h<<5)-h);
+  return COLORS[Math.abs(h) % COLORS.length];
+}
+
+function fmtDuration(ms) {
+  const m = Math.floor(ms/60000), h = Math.floor(ms/3600000), d = Math.floor(ms/86400000);
+  if (d >= 14) return Math.floor(d/7) + ' weeks';
+  if (d >= 1)  return d + (d===1?' day':' days');
+  if (h >= 1)  return h + (h===1?' hour':' hours');
+  return m + ' min';
+}
+
+function timeAgo(str) {
+  if (!str) return '';
+  const ms = Date.now() - new Date(str).getTime();
+  const m=Math.floor(ms/60000), h=Math.floor(ms/3600000), d=Math.floor(ms/86400000);
+  if (d>=1) return d+(d===1?' day':' days')+' ago';
+  if (h>=1) return h+(h===1?' hour':' hours')+' ago';
+  return m+' min ago';
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Strip HTML tags + decode common entities (notes from GHL come as HTML)
+function stripHtml(s) {
+  return String(s||'')
+    .replace(/<\s*br\s*\/?>/gi, ' ')
+    .replace(/<\/?p[^>]*>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Compute current stage locally from sheet column timestamps (mirrors Apps Script computeStage_)
+function computeStageLocal(sheetData) {
+  if (!sheetData) return 'Participant';
+  if (sheetData['Purchase 101'])     return 'Purchase 101';
+  if (sheetData['Purchase GC'])      return 'Purchase GC';
+  if (sheetData["Didn't Purchase"])  return "Didn't Purchase";
+  if (sheetData['DC No Show'])       return 'DC - No Show';
+  if (sheetData['DC Cancelled'])     return 'DC - Cancelled';
+  if (sheetData['DC Scheduled'])     return 'DC - Scheduled';
+  if (sheetData['CC No Show'])       return 'CC - No Show';
+  if (sheetData['CC Cancelled'])     return 'CC - Cancelled';
+  if (sheetData['CC Scheduled'])     return 'CC - Scheduled';
+  return 'Participant';
+}
+
+// ── Mark event (CC Cancelled, Purchase 101, etc.) ─────────
+// Optimistic update: applies change locally immediately, then sends to backend.
+// If backend fails, reverts and alerts user.
+async function markEvent(column) {
+  if (!activeContact) return;
+  if (!confirm(`Mark "${column}" for ${activeContact.name}?`)) return;
+
+  // Capture a stable reference to the contact (activeContact gets nulled on closeModal)
+  const target    = activeContact;
+  const nameParts = (target.name || '').trim().split(/\s+/);
+  const firstName = nameParts[0] || '';
+  const lastName  = nameParts.slice(1).join(' ') || '';
+  const nowIso    = new Date().toISOString();
+
+  // ── Optimistic local update ────────────────────────────
+  const prevSheetData = Object.assign({}, target.sheetData || {});
+  const prevStage     = target.stageName;
+  const prevAgeMs     = target.stageAgeMs;
+  const prevChangedAt = target.stageChangedAt;
+
+  if (!target.sheetData) target.sheetData = {};
+  target.sheetData[column]   = nowIso;
+  target.stageName           = computeStageLocal(target.sheetData);
+  target.stageAgeMs          = 0;
+  target.stageAge            = 0;
+  target.stageChangedAt      = nowIso;
+
+  renderStats();
+  renderFilters();
+  renderTable();
+
+  document.getElementById('action-saved').style.display = 'block';
+  setTimeout(() => { document.getElementById('action-saved').style.display = 'none'; }, 1500);
+  closeModal();
+
+  // ── Send to backend (no reload — change already visible) ────
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'recordEvent',
+        email: target.email,
+        column: column,
+        firstName: firstName,
+        lastName: lastName,
+        timestamp: nowIso
+      })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Save error');
+  } catch(err) {
+    // Revert optimistic update
+    target.sheetData      = prevSheetData;
+    target.stageName      = prevStage;
+    target.stageAgeMs     = prevAgeMs;
+    target.stageAge       = prevAgeMs;
+    target.stageChangedAt = prevChangedAt;
+    renderStats();
+    renderFilters();
+    renderTable();
+    alert('Could not save action: ' + err.message);
+  }
+}
+
+// ── Settings ──────────────────────────────────────────────
+async function openSettings() {
+  try {
+    const res  = await fetch(SCRIPT_URL + '?action=getConfig');
+    const json = await res.json();
+    if (json.success && json.data.challengeStartDate && json.data.challengeStartDate !== '✗ no configurado') {
+      document.getElementById('settings-date').value = json.data.challengeStartDate;
+    }
+  } catch(e) { /* deja el input vacío si falla */ }
+  document.getElementById('settings-overlay').classList.add('open');
+}
+
+function closeSettings() {
+  document.getElementById('settings-overlay').classList.remove('open');
+}
+
+function onSettingsOverlayClick(e) {
+  if (e.target === document.getElementById('settings-overlay')) closeSettings();
+}
+
+async function archiveChallenge() {
+  const name = document.getElementById('settings-archive-name').value.trim();
+  if (!name) {
+    alert('Enter a challenge name (e.g., "2026-05")');
+    return;
+  }
+  if (!confirm(`Archive current challenge as "${name}"?\n\nThis will:\n• Copy all Participants rows to Historical with Challenge="${name}"\n• Clear the Participants sheet (ready for next challenge)\n\nProceed?`)) return;
+
+  const btn = document.getElementById('settings-archive-btn');
+  btn.disabled = true; btn.textContent = 'Archiving…';
+
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'archiveChallenge', challenge: name })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Archive error');
+
+    alert(`✓ Archived ${json.data.archived} participants to "${name}".\n\nActive sheet cleared. Update Challenge Start Date for the next challenge.`);
+    btn.textContent = 'Archive'; btn.disabled = false;
+    document.getElementById('settings-archive-name').value = '';
+    historicalLoaded = false;
+    closeSettings();
+    loadData();
+  } catch(err) {
+    btn.textContent = 'Archive'; btn.disabled = false;
+    alert('Error: ' + err.message);
+  }
+}
+
+async function saveStartDate() {
+  const date = document.getElementById('settings-date').value;
+  if (!date) return;
+  const btn = document.getElementById('settings-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const res  = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'updateChallengeStartDate', date })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Error');
+    document.getElementById('settings-saved').style.display = 'inline';
+    btn.textContent = 'Save'; btn.disabled = false;
+    setTimeout(() => {
+      document.getElementById('settings-saved').style.display = 'none';
+      closeSettings();
+      loadData();
+    }, 1500);
+  } catch(err) {
+    btn.textContent = 'Error — Retry'; btn.disabled = false;
+  }
+}
+
+// ── Keyboard ──────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeModal(); closeSettings(); }
+});
+
+// ── Boot ──────────────────────────────────────────────────
+loadData();
+</script>
+</body>
+</html>
