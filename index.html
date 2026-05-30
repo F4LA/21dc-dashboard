@@ -1906,6 +1906,15 @@ async function openModal(emailOrId) {
       const json = await res.json();
       if (json.success) {
         if (json.data.contactId) p.contactId = json.data.contactId;
+        if (json.data.phone) {
+          p.phone = json.data.phone;
+          // Update modal phone field if still showing this participant
+          if (activeContact && activeContact.email === p.email) {
+            document.getElementById('m-phone').innerHTML = formatPhone(p.phone);
+            document.getElementById('m-sub').textContent =
+              [p.email, p.phone].filter(Boolean).join(' · ') || '—';
+          }
+        }
         p.allNotes = (json.data.notes || []).map(n => ({
           id: n.id, body: n.body, dateAdded: n.dateAdded
         }));
