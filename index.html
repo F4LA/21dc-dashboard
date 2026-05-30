@@ -1906,8 +1906,10 @@ async function openModal(emailOrId) {
       const json = await res.json();
       if (json.success) {
         if (json.data.contactId) p.contactId = json.data.contactId;
-        if (json.data.phone) {
-          p.phone = json.data.phone;
+        // Phone lives at json.data.contact.phone in the backend response
+        const phoneFromContact = json.data.contact && json.data.contact.phone;
+        if (phoneFromContact) {
+          p.phone = phoneFromContact;
           // Update modal phone field if still showing this participant
           if (activeContact && activeContact.email === p.email) {
             document.getElementById('m-phone').innerHTML = formatPhone(p.phone);
