@@ -731,6 +731,7 @@
         <div class="info-item"><label>Stage</label><span id="m-stage">—</span></div>
         <div class="info-item"><label>Time in stage</label><span id="m-time">—</span></div>
         <div class="info-item"><label>Email</label><span id="m-email">—</span></div>
+        <div class="info-item"><label>Phone</label><span id="m-phone">—</span></div>
         <div class="info-item"><label>Source</label><span id="m-source">—</span></div>
         <div class="info-item"><label>Everfit Login</label><span id="m-everfit">—</span></div>
         <div class="info-item"><label>Kickoff Registered</label><span id="m-kickoff">—</span></div>
@@ -1876,6 +1877,7 @@ async function openModal(emailOrId) {
 
   document.getElementById('m-time').textContent    = fmtDuration(p.stageAgeMs);
   document.getElementById('m-email').textContent   = p.email  || '—';
+  document.getElementById('m-phone').innerHTML     = formatPhone(p.phone);
   document.getElementById('m-source').textContent  = formatSource(p.source);
   document.getElementById('m-everfit').innerHTML   = indBadge(p.everfitLogin);
   document.getElementById('m-kickoff').innerHTML   = indBadge(p.kickoffRegistrado);
@@ -1923,6 +1925,15 @@ function indBadge(yes) {
   return yes
     ? '<span class="ind ind-yes">✓ Yes</span>'
     : '<span class="ind ind-no">✗ No</span>';
+}
+
+// Format phone as a clickable tel: link
+function formatPhone(p) {
+  if (!p) return '—';
+  const clean = String(p).trim();
+  // tel: URI accepts most formats — strip spaces for safety
+  const href = clean.replace(/\s+/g, '');
+  return `<a href="tel:${esc(href)}" style="color:var(--text);text-decoration:none">${esc(clean)}</a>`;
 }
 
 // Format source value from sheet (e.g. "sms" → "SMS", "email" → "Email")
