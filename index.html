@@ -520,9 +520,58 @@
       .main { padding: 14px; }
       .hide-sm { display: none !important; }
       .stats-bar .stat-item:nth-child(n+4) { display: none; }
+
+      /* Tabs scroll horizontally instead of wrapping */
+      .view-tabs {
+        overflow-x: auto;
+        white-space: nowrap;
+        padding: 0 14px;
+        -webkit-overflow-scrolling: touch;
+      }
+      .view-tabs::-webkit-scrollbar { display: none; }
+      .view-tab {
+        flex-shrink: 0;
+        padding: 11px 14px;
+        font-size: 13px;
+      }
+
+      /* Header more compact */
+      .header { padding: 0 14px; height: 52px; }
+      .header h1 { font-size: 14px; }
+      .header-meta { font-size: 11px; }
+      .header-right .btn-sm { padding: 5px 8px; font-size: 12px; }
+
+      /* Modal more usable on mobile */
+      .modal {
+        max-width: 100%;
+        max-height: 100vh;
+        border-radius: 0;
+        margin: 0;
+      }
+      .overlay { padding: 0; }
+      .modal-body { padding: 14px 16px; }
+      .info-grid { grid-template-columns: 1fr; gap: 8px; }
+      .actions-grid { grid-template-columns: 1fr; }
+
+      /* Onboarding/Accountability cards stack */
+      .ob-card, .acc-card { grid-template-columns: auto 1fr; gap: 10px; }
+      .ob-card .ob-actions, .acc-card .acc-card-time {
+        grid-column: 1 / -1;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+      }
+
+      /* Settings panel full width */
+      #settings-overlay { padding: 56px 8px 0; }
+      .settings-panel { width: 100%; }
+
+      /* Analytics stack to one column */
+      .an-wrap { grid-template-columns: 1fr; gap: 16px; }
     }
     @media (max-width: 480px) {
       .stats-bar { display: none; }
+      .header-meta { display: none; }
+      .filter-bar { flex-wrap: wrap; }
     }
   </style>
 </head>
@@ -682,9 +731,10 @@
         <div class="info-item"><label>Stage</label><span id="m-stage">—</span></div>
         <div class="info-item"><label>Time in stage</label><span id="m-time">—</span></div>
         <div class="info-item"><label>Email</label><span id="m-email">—</span></div>
-        <div class="info-item"><label>Phone</label><span id="m-phone">—</span></div>
+        <div class="info-item"><label>Source</label><span id="m-source">—</span></div>
         <div class="info-item"><label>Everfit Login</label><span id="m-everfit">—</span></div>
         <div class="info-item"><label>Kickoff Registered</label><span id="m-kickoff">—</span></div>
+        <div class="info-item" style="grid-column: span 2"><label>History</label><span id="m-history">—</span></div>
       </div>
 
       <!-- Stage actions -->
@@ -1641,6 +1691,7 @@ function computeFunnel() {
   let purchase101Count = 0, purchaseGCCount = 0;
   let purchase101Revenue = 0, purchaseGCRevenue = 0;
   let challengeRevenue = 0;
+  const sourceCount = {};   // { source: count }
 
   const attendedCCStages = ['DC - Scheduled', 'DC - Cancelled', 'DC - No Show',
                             "Didn't Purchase", 'Purchase 101', 'Purchase GC'];
@@ -1661,6 +1712,10 @@ function computeFunnel() {
       purchaseGCCount++;
       purchaseGCRevenue += parseFloat(sd['Purchase GC Amount']) || 0;
     }
+
+    // Source breakdown
+    const src = (p.source || '').toLowerCase().trim() || 'unknown';
+    sourceCount[src] = (sourceCount[src] || 0) + 1;
   });
 
   const purchased = purchase101Count + purchaseGCCount;
@@ -1668,7 +1723,8 @@ function computeFunnel() {
     total, bookedCC, attendedCC, bookedDC, attendedDC, purchased,
     purchase101Count, purchaseGCCount,
     purchase101Revenue, purchaseGCRevenue, challengeRevenue,
-    totalRevenue: challengeRevenue + purchase101Revenue + purchaseGCRevenue
+    totalRevenue: challengeRevenue + purchase101Revenue + purchaseGCRevenue,
+    sourceCount
   };
 }
 
@@ -1749,7 +1805,7 @@ function renderAnalytics() {
         </div>
       </div>
 
-      <div class="an-card">
+      <div class="an-card" style="margin-bottom:24px">
         <div class="an-card-title">Product Breakdown</div>
         <div class="an-row">
           <div>
@@ -1773,8 +1829,29 @@ function renderAnalytics() {
           <span class="an-row-value">${f.attendedDC - f.purchased}</span>
         </div>
       </div>
+
+      <div class="an-card">
+        <div class="an-card-title">Source Breakdown</div>
+        ${renderSourceRows(f.sourceCount, f.total)}
+      </div>
     </div>
   `;
+}
+
+function renderSourceRows(sourceCount, total) {
+  const entries = Object.entries(sourceCount).sort((a, b) => b[1] - a[1]);
+  if (entries.length === 0) {
+    return `<div class="an-row"><span class="an-row-label" style="color:var(--text-muted)">No data yet</span></div>`;
+  }
+  return entries.map(([src, count]) => `
+    <div class="an-row">
+      <div>
+        <span class="an-row-label">${esc(formatSource(src))}</span>
+        <span class="an-row-meta">${pct(count, total)} of total</span>
+      </div>
+      <span class="an-row-value">${count}</span>
+    </div>
+  `).join('');
 }
 
 
@@ -1799,9 +1876,10 @@ async function openModal(emailOrId) {
 
   document.getElementById('m-time').textContent    = fmtDuration(p.stageAgeMs);
   document.getElementById('m-email').textContent   = p.email  || '—';
-  document.getElementById('m-phone').textContent   = p.phone  || '—';
+  document.getElementById('m-source').textContent  = formatSource(p.source);
   document.getElementById('m-everfit').innerHTML   = indBadge(p.everfitLogin);
   document.getElementById('m-kickoff').innerHTML   = indBadge(p.kickoffRegistrado);
+  document.getElementById('m-history').innerHTML   = formatHistory(p.previousChallenges);
 
   // Render contextual outreach buttons
   renderOutreachSection(p);
@@ -1845,6 +1923,28 @@ function indBadge(yes) {
   return yes
     ? '<span class="ind ind-yes">✓ Yes</span>'
     : '<span class="ind ind-no">✗ No</span>';
+}
+
+// Format source value from sheet (e.g. "sms" → "SMS", "email" → "Email")
+function formatSource(s) {
+  if (!s) return '—';
+  const norm = String(s).toLowerCase().trim();
+  const map = {
+    'sms': 'SMS', 'email': 'Email', 'affiliate': 'Affiliate',
+    'direct': 'Direct', 'organic': 'Organic', 'instagram': 'Instagram',
+    'facebook': 'Facebook'
+  };
+  return map[norm] || (s[0].toUpperCase() + s.slice(1).toLowerCase());
+}
+
+// Format previousChallenges list as a badge + tooltip
+function formatHistory(prev) {
+  if (!prev || prev.length === 0) {
+    return '<span style="color:var(--accent);font-weight:500">🆕 New participant</span>';
+  }
+  const list = prev.join(', ');
+  return `<span style="color:#065f46;font-weight:500">🔄 Returning</span>
+    <span style="color:var(--text-muted);font-size:11px"> · ${prev.length} previous (${esc(list)})</span>`;
 }
 
 // Render outreach buttons contextually based on participant's stage.
