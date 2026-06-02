@@ -1977,10 +1977,12 @@ function renderOutreachSection(p) {
   const sd = p.sheetData || {};
 
   let heading = null;
+  let description = null;
   let buttons = [];
 
   if (stage === 'Participant') {
-    heading = 'Onboarding outreach (Jackie)';
+    heading = 'Onboarding & Clarity Call outreach (Jackie)';
+    description = 'Override only — the regular flow lives in the <strong>Onboarding</strong> tab. Use these buttons to log actions taken outside that flow, or to correct missed click-throughs.';
     if (!p.everfitLogin) {
       buttons.push({ col: 'Login Reachout Sent', label: 'Login Reachout' });
     }
@@ -1990,6 +1992,7 @@ function renderOutreachSection(p) {
     buttons.push({ col: 'Day 6 Offer Doc Sent', label: 'Day 6 Offer Doc' });
   } else if (['CC - Cancelled', 'CC - No Show', 'DC - Cancelled', 'DC - No Show'].includes(stage)) {
     heading = 'Reschedule outreach (Dennis)';
+    description = 'Override only — the regular flow lives in the <strong>Action Queue</strong> tab. Use these buttons to log actions taken outside that flow, or to correct missed click-throughs.';
     buttons.push({ col: 'Reschedule DM Sent',  label: 'Reschedule DM' });
     buttons.push({ col: 'Reschedule Call #1',  label: 'Call #1' });
     buttons.push({ col: 'Reschedule Call #2',  label: 'Call #2' });
@@ -2011,6 +2014,7 @@ function renderOutreachSection(p) {
 
   wrap.innerHTML = `
     <div class="section-title" style="margin-top:18px">${esc(heading)}</div>
+    <div class="ob-section-desc" style="margin-bottom:10px;font-size:12px">${description}</div>
     <div class="actions-grid">${btnHtml}</div>
   `;
 }
