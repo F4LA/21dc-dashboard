@@ -750,6 +750,9 @@
         <button class="action-btn action-btn-success" onclick="markEvent('Purchase GC')">Purchase GC</button>
       </div>
 
+      <!-- Refund section (always visible) -->
+      <div id="refund-section"></div>
+
       <!-- Outreach actions (contextual based on stage) -->
       <div id="outreach-section"></div>
       <div class="action-saved" id="action-saved">✓ Action recorded</div>
@@ -802,6 +805,7 @@ const FILTERS = [
   { id:'dc_issue',    label:'DC Issues',     stages:['DC - No Show','DC - Cancelled'] },
   { id:'no_buy',      label:'No Purchase',   stages:["Didn't Purchase"] },
   { id:'bought',      label:'Purchases',     stages:['Purchase 101','Purchase GC'] },
+  { id:'refunded',    label:'Refunded',      stages: null, refundedOnly: true },
 ];
 
 // ── State ─────────────────────────────────────────────────
@@ -879,7 +883,21 @@ Here's the link to grab a time: https://api.leadconnectorhq.com/widget/bookings/
 
 I'm sending over a document with some information about what we offer after the challenge, just in case it's useful for you at some point.
 
-If you ever want to chat, we're here. Hope the rest of the challenge is going well!`
+If you ever want to chat, we're here. Hope the rest of the challenge is going well!`,
+
+  // Sent via Everfit DM once participant has logged into Everfit
+  welcome_message: (firstName) =>
+`Hey ${firstName}
+Welcome to the 21-Day Lean & Strong Challenge with Strong Standard Coaching! I'm [Lead Coach Name], your coach, and I'll be here to make sure you have an amazing experience and crush your goals during the Challenge. I'll be supporting you through the community and our weekly group calls, so you're never alone in this journey.
+I'm super excited to get started on [Date]!
+Your Onboarding Tasks are already ready for you, so make sure to complete them as soon as you can. This will help you get familiar with everything you need to know to be successful in the Challenge.
+
+To stay up to date with all the important events, like the Kick-Off Call and our weekly Coaching Calls, make sure to add our calendar using this link:
+
+👉https://calendar.google.com/calendar/u/4?cid=Y19iNGY1NDBmYzEyN2ZhZmI1MzE1NjQ0OGU3YTlmMDhiZDVmZmY4ZmJmN2M0MzVkNjJmYTFlMTZlNzVjODM5ZDYwQGdyb3VwLmNhbGVuZGFyLmdvb2dsZS5jb20
+
+When you open the link, click "Add" when it asks if you want to add the calendar. Then just make sure it's visible by checking the box next to it. To do that, go to the calendar menu (the three lines at the top left corner).
+Let's get ready to make some awesome progress together!`
 };
 
 // ── Challenge day helpers ─────────────────────────────────
@@ -916,6 +934,7 @@ function challengeDayLabel() {
 // ── Onboarding filters ────────────────────────────────────
 function getOnboardingNoEverfit() {
   return participants.filter(p => {
+    if (p.isRefunded) return false;
     const sd = p.sheetData || {};
     const purchased = sd['Date Purchased'] || p.createdAt;
     if (!purchased) return false;
@@ -942,7 +961,7 @@ function getCCBookingFlow() {
   if (day === null || day < 2) return [];  // No outreach before Day 2
 
   return participants
-    .filter(p => p.stageName === 'Participant')
+    .filter(p => p.stageName === 'Participant' && !p.isRefunded)
     .map(p => {
       const sd = p.sheetData || {};
       let action = null;
@@ -968,22 +987,61 @@ function getCCBookingFlow() {
     });
 }
 
+// Welcome Message queue: logged into Everfit, no Welcome sent yet
+function getWelcomeQueue() {
+  return participants.filter(p => {
+    if (p.isRefunded) return false;
+    const sd = p.sheetData || {};
+    if (!sd['Login to Everfit']) return false;
+    if (sd['Welcome Message Sent']) return false;
+    return true;
+  }).sort((a, b) => {
+    const ta = new Date((a.sheetData && a.sheetData['Login to Everfit']) || 0).getTime();
+    const tb = new Date((b.sheetData && b.sheetData['Login to Everfit']) || 0).getTime();
+    return ta - tb;
+  });
+}
+
+// Setup Tasks queue: logged in, Training and/or Calories not yet assigned
+// List stays visible until BOTH are marked.
+function getSetupTasksQueue() {
+  return participants.filter(p => {
+    if (p.isRefunded) return false;
+    const sd = p.sheetData || {};
+    if (!sd['Login to Everfit']) return false;
+    const trainingDone = !!sd['Training Assigned'];
+    const caloriesDone = !!sd['Calories Assigned'];
+    return !(trainingDone && caloriesDone);
+  }).sort((a, b) => {
+    const ta = new Date((a.sheetData && a.sheetData['Login to Everfit']) || 0).getTime();
+    const tb = new Date((b.sheetData && b.sheetData['Login to Everfit']) || 0).getTime();
+    return ta - tb;
+  });
+}
+
 function getOnboardingCount() {
-  return getOnboardingNoEverfit().length + getCCBookingFlow().length;
+  return getOnboardingNoEverfit().length
+       + getWelcomeQueue().length
+       + getSetupTasksQueue().length
+       + getCCBookingFlow().length;
 }
 
 // Map action type → sheet column
 const ACTION_TO_COLUMN = {
-  day_2_dm:        'Day 2 DM Sent',
-  day_4_call:      'Day 4 Call #1',
-  day_5_call:      'Day 5 Call #2',
-  day_6_offer_doc: 'Day 6 Offer Doc Sent'
+  day_2_dm:         'Day 2 DM Sent',
+  day_4_call:       'Day 4 Call #1',
+  day_5_call:       'Day 5 Call #2',
+  day_6_offer_doc:  'Day 6 Offer Doc Sent',
+  welcome_message:  'Welcome Message Sent',
+  training:         'Training Assigned',
+  calories:         'Calories Assigned'
 };
 
 // Map action type → message template key (if it has a copyable message)
 const ACTION_TO_TEMPLATE = {
-  day_2_dm:        'day_2_dm',
-  day_6_offer_doc: 'day_6_offer_doc'
+  day_2_dm:         'day_2_dm',
+  day_6_offer_doc:  'day_6_offer_doc',
+  welcome_message:  'welcome_message'
 };
 
 // ── Accountability filters ────────────────────────────────
@@ -993,6 +1051,7 @@ const ACTION_TO_TEMPLATE = {
 function getDennisFlags() {
   const flags = [];
   participants.forEach(p => {
+    if (p.isRefunded) return;
     const sd    = p.sheetData || {};
     const hrs   = (p.stageAgeMs || 0) / 3600000;
     const stage = p.stageName;
@@ -1035,6 +1094,7 @@ function getJackieFlags() {
   const day = currentChallengeDay();
 
   participants.forEach(p => {
+    if (p.isRefunded) return;
     const sd = p.sheetData || {};
     const purchased = sd['Date Purchased'] || p.createdAt;
     if (!purchased) return;
@@ -1046,6 +1106,15 @@ function getJackieFlags() {
       const stale = !sent || ((Date.now() - new Date(sent).getTime()) / 3600000) >= 48;
       if (stale) {
         flags.push({ p, issue: 'No Everfit login + Login Reachout stale', hrs: hrsSincePurchase });
+      }
+    }
+
+    // 1b) Welcome Message flag — logged in 48h+, no Welcome Message sent
+    if (sd['Login to Everfit'] && !sd['Welcome Message Sent']) {
+      const loginTs = new Date(sd['Login to Everfit']).getTime();
+      const hrsSinceLogin = (Date.now() - loginTs) / 3600000;
+      if (hrsSinceLogin >= 48) {
+        flags.push({ p, issue: 'Welcome Message not sent (logged in 48h+)', hrs: hrsSinceLogin });
       }
     }
 
@@ -1133,6 +1202,7 @@ function suggestedAction(p) {
 
 function getActionQueue() {
   return participants
+    .filter(p => !p.isRefunded)
     .map(p => ({ p, action: suggestedAction(p) }))
     .filter(x => x.action !== null)
     .sort((a, b) => b.p.stageAgeMs - a.p.stageAgeMs);
@@ -1211,6 +1281,7 @@ function enrich(p) {
   p.stageAge   = p.stageAgeMs;
   p.everfitLogin      = !!p.everfitLogin;
   p.kickoffRegistrado = !!p.kickoffRegistered;
+  p.isRefunded        = !!(p.sheetData && p.sheetData['Refunded']);
   return p;
 }
 
@@ -1241,11 +1312,16 @@ function computeStageChangedAt(p) {
 // ── Stats ─────────────────────────────────────────────────
 function renderStats() {
   const d = participants;
-  document.getElementById('s-total').textContent       = d.length;
-  document.getElementById('s-participant').textContent  = d.filter(p=>p.stageName==='Participant').length;
-  document.getElementById('s-cc').textContent           = d.filter(p=>p.stageName==='CC - Scheduled').length;
-  document.getElementById('s-dc').textContent           = d.filter(p=>p.stageName==='DC - Scheduled').length;
-  document.getElementById('s-purchase').textContent     = d.filter(p=>p.stageName.startsWith('Purchase')).length;
+  const active = d.filter(p => !p.isRefunded);
+  const refundedCount = d.length - active.length;
+  document.getElementById('s-total').innerHTML =
+    refundedCount > 0
+      ? `${active.length} <span style="font-size:11px;color:var(--text-muted);font-weight:400">(of ${d.length})</span>`
+      : d.length;
+  document.getElementById('s-participant').textContent  = active.filter(p=>p.stageName==='Participant').length;
+  document.getElementById('s-cc').textContent           = active.filter(p=>p.stageName==='CC - Scheduled').length;
+  document.getElementById('s-dc').textContent           = active.filter(p=>p.stageName==='DC - Scheduled').length;
+  document.getElementById('s-purchase').textContent     = active.filter(p=>p.stageName.startsWith('Purchase')).length;
 }
 
 // ── Filters ───────────────────────────────────────────────
@@ -1262,9 +1338,10 @@ function renderFilters() {
   }
 
   document.getElementById('filter-bar').innerHTML = FILTERS.map(f => {
-    const count = f.stages
-      ? participants.filter(p=>f.stages.includes(p.stageName)).length
-      : participants.length;
+    let count;
+    if (f.refundedOnly) count = participants.filter(p => p.isRefunded).length;
+    else if (f.stages)  count = participants.filter(p => f.stages.includes(p.stageName) && !p.isRefunded).length;
+    else                count = participants.length;
     if (count === 0 && f.id !== 'all') return '';
     return `<button class="filter-chip${activeFilter===f.id?' active':''}"
       onclick="setFilter('${f.id}')">${f.label}<span class="filter-count">${count}</span></button>`;
@@ -1297,9 +1374,15 @@ function updateSortHeaders() {
 
 function getFiltered() {
   const f = FILTERS.find(x=>x.id===activeFilter);
-  let list = f && f.stages
-    ? participants.filter(p=>f.stages.includes(p.stageName))
-    : [...participants];
+  let list;
+  if (f && f.refundedOnly) {
+    list = participants.filter(p => p.isRefunded);
+  } else if (f && f.stages) {
+    list = participants.filter(p => f.stages.includes(p.stageName) && !p.isRefunded);
+  } else {
+    // 'all' filter still includes refunded so they're visible somewhere by default
+    list = [...participants];
+  }
 
   list.sort((a,b) => {
     let av = a[sortKey], bv = b[sortKey];
@@ -1336,7 +1419,12 @@ function renderTrackerTable() {
                     : p.stageAgeMs > 48*3600000 ? 'warn' : '';
     const lastNote = p.lastNote;
 
-    return `<tr onclick="openModal('${p.email}')">
+    const refundBadge = p.isRefunded
+      ? `<span class="stage-badge" style="background:#fee2e2;color:#991b1b;margin-left:6px"><span class="stage-dot" style="background:#ef4444"></span>Refunded</span>`
+      : '';
+    const rowOpacity = p.isRefunded ? 'opacity:0.6' : '';
+
+    return `<tr onclick="openModal('${p.email}')" style="${rowOpacity}">
       <td><div class="avatar" style="background:${clr}">${ini}</div></td>
       <td>
         <div class="contact-name">${esc(p.name)}</div>
@@ -1347,6 +1435,7 @@ function renderTrackerTable() {
           <span class="stage-dot" style="background:${st.dot}"></span>
           ${esc(p.stageName)}
         </span>
+        ${refundBadge}
       </td>
       <td><span class="time-cell ${timeClass}">${fmtDuration(p.stageAgeMs)}</span></td>
       <td class="hide-sm">
@@ -1509,6 +1598,8 @@ function renderOnboarding() {
   document.getElementById('onboarding-wrap').style.display = 'block';
 
   const noEverfit  = getOnboardingNoEverfit();
+  const welcome    = getWelcomeQueue();
+  const setup      = getSetupTasksQueue();
   const ccBooking  = getCCBookingFlow();
   const day        = currentChallengeDay();
   const dayLabel   = challengeDayLabel();
@@ -1541,6 +1632,28 @@ function renderOnboarding() {
 
     <div class="ob-section">
       <div class="ob-section-header">
+        <span class="ob-section-title">Welcome Message</span>
+        <span class="ob-section-count">${welcome.length}</span>
+      </div>
+      <div class="ob-section-desc">Participants who logged into Everfit and haven't received a Welcome Message yet. Send via <strong>Everfit DM</strong>.</div>
+      ${welcome.length === 0
+        ? `<div class="ob-empty">✨ All welcomes sent.</div>`
+        : `<div class="ob-list">${welcome.map(p => renderOnboardingCard(p, { type: 'welcome_message', label: 'Send Welcome Message', hasCopy: true })).join('')}</div>`}
+    </div>
+
+    <div class="ob-section">
+      <div class="ob-section-header">
+        <span class="ob-section-title">Setup Tasks (Training &amp; Calories)</span>
+        <span class="ob-section-count">${setup.length}</span>
+      </div>
+      <div class="ob-section-desc">Participants who logged in and still need their training plan and/or calorie targets assigned in Everfit. Check the intake form in Everfit, then assign and mark here. The list stays visible until both are marked — review daily.</div>
+      ${setup.length === 0
+        ? `<div class="ob-empty">✨ Everyone is set up.</div>`
+        : `<div class="ob-list">${setup.map(p => renderSetupTaskCard(p)).join('')}</div>`}
+    </div>
+
+    <div class="ob-section">
+      <div class="ob-section-header">
         <span class="ob-section-title">CC Booking Outreach</span>
         <span class="ob-section-count">${ccBooking.length}</span>
       </div>
@@ -1548,6 +1661,43 @@ function renderOnboarding() {
       ${ccBookingSection}
     </div>
   `;
+}
+
+// Setup Task card: training + calories buttons in one row.
+function renderSetupTaskCard(p) {
+  const ini = initials(p.name);
+  const clr = nameColor(p.name);
+  const sd  = p.sheetData || {};
+  const trainingDone = !!sd['Training Assigned'];
+  const caloriesDone = !!sd['Calories Assigned'];
+
+  // Days since login
+  const loginTs = sd['Login to Everfit'] ? new Date(sd['Login to Everfit']).getTime() : null;
+  const daysSinceLogin = loginTs ? Math.floor((Date.now() - loginTs) / 86400000) : null;
+  const loginLabel = daysSinceLogin === null ? '' :
+    daysSinceLogin === 0 ? 'Logged in today' :
+    daysSinceLogin === 1 ? 'Logged in 1 day ago' :
+    `Logged in ${daysSinceLogin} days ago`;
+
+  const trainingClass = trainingDone ? 'ob-btn ob-btn-success' : 'ob-btn';
+  const caloriesClass = caloriesDone ? 'ob-btn ob-btn-success' : 'ob-btn';
+  const trainingLabel = trainingDone ? '✓ Training' : 'Training Assigned';
+  const caloriesLabel = caloriesDone ? '✓ Calories' : 'Calories Assigned';
+
+  return `
+    <div class="ob-card">
+      <div class="avatar" style="background:${clr}">${ini}</div>
+      <div class="ob-card-info">
+        <div class="ob-card-name">${esc(p.name)}</div>
+        <div class="ob-card-meta">${esc(p.email || '')}${loginLabel ? ' · ' + esc(loginLabel) : ''}</div>
+      </div>
+      <div class="ob-actions">
+        <button class="${trainingClass}" ${trainingDone ? 'disabled' : ''}
+          onclick="markOnboardingSent('${esc(p.email)}', 'training', this)">${trainingLabel}</button>
+        <button class="${caloriesClass}" ${caloriesDone ? 'disabled' : ''}
+          onclick="markOnboardingSent('${esc(p.email)}', 'calories', this)">${caloriesLabel}</button>
+      </div>
+    </div>`;
 }
 
 function renderOnboardingCard(p, action) {
@@ -1663,7 +1813,7 @@ function renderAccountability() {
         <span class="acc-section-title">Jackie — open follow-ups</span>
         <span class="acc-section-count${jackie.length === 0 ? ' zero' : ''}">${jackie.length}</span>
       </div>
-      <div class="acc-section-desc">Onboarding outreach stale 48h+ (Everfit login still missing).</div>
+      <div class="acc-section-desc">Onboarding outreach stale 48h+ — Login Reachout missing, Welcome Message not sent, or CC booking step overdue.</div>
       ${jackie.length === 0
         ? `<div class="acc-empty">✓ Jackie is on top of everything.</div>`
         : `<div class="acc-list">${jackie.map(renderAccCard).join('')}</div>`}
@@ -1687,11 +1837,12 @@ function renderAccCard({ p, issue, hrs }) {
 
 // ── Analytics view ────────────────────────────────────────
 function computeFunnel() {
-  const total = participants.length;
+  const grossTotal = participants.length;
   let bookedCC = 0, attendedCC = 0, bookedDC = 0, attendedDC = 0;
   let purchase101Count = 0, purchaseGCCount = 0;
   let purchase101Revenue = 0, purchaseGCRevenue = 0;
-  let challengeRevenue = 0;
+  let challengeRevenueGross = 0;
+  let refundCount = 0, refundRevenue = 0;
   const sourceCount = {};   // { source: count }
 
   const attendedCCStages = ['DC - Scheduled', 'DC - Cancelled', 'DC - No Show',
@@ -1700,7 +1851,15 @@ function computeFunnel() {
 
   participants.forEach(p => {
     const sd = p.sheetData || {};
-    challengeRevenue += parseFloat(sd['$ Package']) || 0;
+    const pkg = parseFloat(sd['$ Package']) || 0;
+    challengeRevenueGross += pkg;
+
+    if (p.isRefunded) {
+      refundCount++;
+      refundRevenue += pkg;
+      return;   // refunded → don't count in funnel or source breakdown
+    }
+
     if (sd['CC Scheduled']) bookedCC++;
     if (attendedCCStages.includes(p.stageName)) attendedCC++;
     if (sd['DC Scheduled']) bookedDC++;
@@ -1714,17 +1873,23 @@ function computeFunnel() {
       purchaseGCRevenue += parseFloat(sd['Purchase GC Amount']) || 0;
     }
 
-    // Source breakdown
+    // Source breakdown (active participants only)
     const src = (p.source || '').toLowerCase().trim() || 'unknown';
     sourceCount[src] = (sourceCount[src] || 0) + 1;
   });
 
+  const netTotal = grossTotal - refundCount;
   const purchased = purchase101Count + purchaseGCCount;
+  const challengeRevenueNet = challengeRevenueGross - refundRevenue;
   return {
-    total, bookedCC, attendedCC, bookedDC, attendedDC, purchased,
+    grossTotal, netTotal, refundCount, refundRevenue,
+    total: netTotal,   // alias for funnel base
+    bookedCC, attendedCC, bookedDC, attendedDC, purchased,
     purchase101Count, purchaseGCCount,
-    purchase101Revenue, purchaseGCRevenue, challengeRevenue,
-    totalRevenue: challengeRevenue + purchase101Revenue + purchaseGCRevenue,
+    purchase101Revenue, purchaseGCRevenue,
+    challengeRevenue: challengeRevenueGross,
+    challengeRevenueNet,
+    totalRevenue: challengeRevenueNet + purchase101Revenue + purchaseGCRevenue,
     sourceCount
   };
 }
@@ -1760,11 +1925,16 @@ function renderAnalytics() {
       <span>converted</span>
     </div>`;
 
+  const refundSubtitle = f.refundCount > 0
+    ? `<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Funnel excludes ${f.refundCount} refunded · gross enrolled: ${f.grossTotal}</div>`
+    : '';
+
   document.getElementById('analytics-wrap').innerHTML = `
     <div class="an-card">
       <div class="an-card-title">Funnel — Active Challenge</div>
-      ${funnelStep('Total enrolled',  f.total)}
-      ${connector(f.total, f.bookedCC)}
+      ${refundSubtitle}
+      ${funnelStep('Net participants', f.netTotal)}
+      ${connector(f.netTotal, f.bookedCC)}
       ${funnelStep('Scheduled CC',    f.bookedCC)}
       ${connector(f.bookedCC, f.attendedCC)}
       ${funnelStep('Attended CC',     f.attendedCC)}
@@ -1781,11 +1951,26 @@ function renderAnalytics() {
         <div class="an-card-title">Revenue</div>
         <div class="an-row">
           <div>
-            <span class="an-row-label">Challenge</span>
-            <span class="an-row-meta">${f.total} participants</span>
+            <span class="an-row-label">Challenge (gross)</span>
+            <span class="an-row-meta">${f.grossTotal} participants</span>
           </div>
           <span class="an-row-value">${fmtMoney(f.challengeRevenue)}</span>
         </div>
+        ${f.refundCount > 0 ? `
+        <div class="an-row">
+          <div>
+            <span class="an-row-label" style="color:#991b1b">Refunds</span>
+            <span class="an-row-meta">${f.refundCount} refunded</span>
+          </div>
+          <span class="an-row-value" style="color:#991b1b">−${fmtMoney(f.refundRevenue)}</span>
+        </div>
+        <div class="an-row">
+          <div>
+            <span class="an-row-label">Challenge (net)</span>
+            <span class="an-row-meta">${f.netTotal} net participants</span>
+          </div>
+          <span class="an-row-value">${fmtMoney(f.challengeRevenueNet)}</span>
+        </div>` : ''}
         <div class="an-row">
           <div>
             <span class="an-row-label">1-on-1 upgrades</span>
@@ -1883,7 +2068,8 @@ async function openModal(emailOrId) {
   document.getElementById('m-kickoff').innerHTML   = indBadge(p.kickoffRegistrado);
   document.getElementById('m-history').innerHTML   = formatHistory(p.previousChallenges);
 
-  // Render contextual outreach buttons
+  // Render refund + contextual outreach buttons
+  renderRefundSection(p);
   renderOutreachSection(p);
 
   document.getElementById('note-input').value = '';
@@ -1986,6 +2172,11 @@ function renderOutreachSection(p) {
     if (!p.everfitLogin) {
       buttons.push({ col: 'Login Reachout Sent', label: 'Login Reachout' });
     }
+    if (p.everfitLogin) {
+      buttons.push({ col: 'Welcome Message Sent', label: 'Welcome Message' });
+      buttons.push({ col: 'Training Assigned',    label: 'Training Assigned' });
+      buttons.push({ col: 'Calories Assigned',    label: 'Calories Assigned' });
+    }
     buttons.push({ col: 'Day 2 DM Sent',        label: 'Day 2 DM' });
     buttons.push({ col: 'Day 4 Call #1',        label: 'Day 4 Call #1' });
     buttons.push({ col: 'Day 5 Call #2',        label: 'Day 5 Call #2' });
@@ -2017,6 +2208,117 @@ function renderOutreachSection(p) {
     <div class="ob-section-desc" style="margin-bottom:10px;font-size:12px">${description}</div>
     <div class="actions-grid">${btnHtml}</div>
   `;
+}
+
+// Refund section in modal. Always rendered (regardless of stage).
+function renderRefundSection(p) {
+  const wrap = document.getElementById('refund-section');
+  const sd = p.sheetData || {};
+  const refundedAt = sd['Refunded'];
+
+  if (refundedAt) {
+    let dateLabel = '';
+    try {
+      dateLabel = new Date(refundedAt).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' });
+    } catch(e) {
+      dateLabel = String(refundedAt);
+    }
+    wrap.innerHTML = `
+      <div class="section-title" style="margin-top:18px;color:#991b1b">Refund</div>
+      <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px 14px;font-size:13px;color:#991b1b;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <span>✓ Refunded on <strong>${esc(dateLabel)}</strong></span>
+        <button class="btn btn-ghost btn-sm" onclick="undoRefund()" style="border-color:#fecaca;color:#991b1b">Undo refund</button>
+      </div>
+    `;
+  } else {
+    wrap.innerHTML = `
+      <div class="section-title" style="margin-top:18px">Refund</div>
+      <button class="action-btn action-btn-danger" onclick="markRefunded()" style="width:100%">Mark Refunded</button>
+    `;
+  }
+}
+
+async function markRefunded() {
+  if (!activeContact) return;
+  const target = activeContact;
+  if (!confirm(`Mark "${target.name}" as Refunded? They'll be excluded from outreach queues, accountability flags, and analytics totals.`)) return;
+
+  const nameParts = (target.name || '').trim().split(/\s+/);
+  const nowIso = new Date().toISOString();
+
+  // Optimistic
+  const prev = (target.sheetData && target.sheetData['Refunded']) || null;
+  if (!target.sheetData) target.sheetData = {};
+  target.sheetData['Refunded'] = nowIso;
+  target.isRefunded = true;
+
+  renderRefundSection(target);
+  renderStats(); renderFilters();
+  if (activeView === 'tracker') renderTable();
+  else if (activeView === 'onboarding') renderOnboarding();
+  else if (activeView === 'accountability') renderAccountability();
+  else if (activeView === 'analytics') renderAnalytics();
+
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'recordEvent',
+        email: target.email,
+        column: 'Refunded',
+        firstName: nameParts[0] || '',
+        lastName: nameParts.slice(1).join(' ') || '',
+        timestamp: nowIso
+      })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Save error');
+  } catch(err) {
+    target.sheetData['Refunded'] = prev;
+    target.isRefunded = !!prev;
+    renderRefundSection(target);
+    renderStats(); renderFilters();
+    alert('Could not save: ' + err.message);
+  }
+}
+
+async function undoRefund() {
+  if (!activeContact) return;
+  const target = activeContact;
+  if (!confirm(`Undo the refund for "${target.name}"? They'll re-enter outreach queues and count in analytics again.`)) return;
+
+  const prev = (target.sheetData && target.sheetData['Refunded']) || null;
+  if (target.sheetData) target.sheetData['Refunded'] = '';
+  target.isRefunded = false;
+
+  renderRefundSection(target);
+  renderStats(); renderFilters();
+  if (activeView === 'tracker') renderTable();
+  else if (activeView === 'onboarding') renderOnboarding();
+  else if (activeView === 'accountability') renderAccountability();
+  else if (activeView === 'analytics') renderAnalytics();
+
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'clearEvent',
+        email: target.email,
+        column: 'Refunded'
+      })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Save error');
+  } catch(err) {
+    if (!target.sheetData) target.sheetData = {};
+    target.sheetData['Refunded'] = prev;
+    target.isRefunded = !!prev;
+    renderRefundSection(target);
+    renderStats(); renderFilters();
+    alert('Could not undo: ' + err.message);
+  }
 }
 
 function renderNotes(notes, loading) {
