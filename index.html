@@ -92,7 +92,7 @@
     .stat-label { font-size: 10px; color: var(--text-muted); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.05em; }
 
     /* ── Main ────────────────────────────────────────────── */
-    .main { max-width: 1280px; margin: 0 auto; padding: 24px 40px; }
+    .main { max-width: 1200px; margin: 0 auto; padding: 24px 48px; }
 
     /* ── Filters ─────────────────────────────────────────── */
     .toolbar {
@@ -346,16 +346,21 @@
       transition: background 0.15s;
     }
     .ob-section-header:hover { background: #f3f4f6; }
-    .ob-section-header:hover .ob-section-chevron { color: var(--accent, #5b3def); }
     .ob-section-chevron {
       display: inline-flex;
       align-items: center; justify-content: center;
-      font-size: 14px;
-      color: var(--text-muted);
-      transition: transform 0.2s ease, color 0.15s;
-      width: 20px; height: 20px;
+      font-size: 12px;
+      color: var(--accent, #5b3def);
+      background: var(--accent-light, #ede9fe);
+      transition: transform 0.2s ease, background 0.15s, color 0.15s;
+      width: 26px; height: 26px;
+      border-radius: 50%;
       font-weight: 700;
       flex-shrink: 0;
+    }
+    .ob-section-header:hover .ob-section-chevron {
+      background: var(--accent, #5b3def);
+      color: white;
     }
     .ob-section.collapsed .ob-section-chevron { transform: rotate(-90deg); }
     .ob-section.collapsed .ob-section-body { display: none; }
@@ -1707,7 +1712,7 @@ function renderOnboarding() {
     : `<div class="ob-list">${setup.map(p => renderSetupTaskCard(p)).join('')}</div>`;
 
   document.getElementById('onboarding-wrap').innerHTML = `
-    ${dayLabel ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">${esc(dayLabel)}</div>` : ''}
+    ${dayLabel ? `<div style="font-size:13px;color:var(--accent,#5b3def);font-weight:600;margin:4px 0 20px 4px;letter-spacing:0.2px">${esc(dayLabel)}</div>` : ''}
 
     ${obSection('login_reachout', 'Login Reachout', noEverfit.length,
       `Participants who purchased 24h+ ago and haven't logged into Everfit. Send via <strong>email</strong> (not Everfit DM — they can't receive Everfit messages yet).`,
