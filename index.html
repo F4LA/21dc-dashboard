@@ -331,7 +331,23 @@
     .ob-section-header {
       display: flex; align-items: baseline; gap: 10px;
       margin-bottom: 4px;
+      cursor: pointer;
+      user-select: none;
+      padding: 4px 0;
+      border-radius: 4px;
+      transition: background 0.15s;
     }
+    .ob-section-header:hover { background: var(--off-white, #f8f9fa); }
+    .ob-section-chevron {
+      display: inline-block;
+      font-size: 11px;
+      color: var(--text-muted);
+      transition: transform 0.2s ease;
+      margin-right: 2px;
+      width: 12px;
+    }
+    .ob-section.collapsed .ob-section-chevron { transform: rotate(-90deg); }
+    .ob-section.collapsed .ob-section-body { display: none; }
     .ob-section-title { font-size: 17px; font-weight: 600; color: var(--text-primary); }
     .ob-section-count {
       background: var(--accent-light); color: var(--accent);
@@ -940,7 +956,7 @@ function getOnboardingNoEverfit() {
     if (!purchased) return false;
     const hrsSincePurchase = (Date.now() - new Date(purchased).getTime()) / 3600000;
     if (hrsSincePurchase < 24) return false;
-    if (sd['Login to Everfit']) return false;
+    if (isValidLoginDate(sd['Login to Everfit'])) return false;
     const sent = sd['Login Reachout Sent'];
     if (sent) {
       const hrsSinceSent = (Date.now() - new Date(sent).getTime()) / 3600000;
@@ -992,7 +1008,7 @@ function getWelcomeQueue() {
   return participants.filter(p => {
     if (p.isRefunded) return false;
     const sd = p.sheetData || {};
-    if (!sd['Login to Everfit']) return false;
+    if (!isValidLoginDate(sd['Login to Everfit'])) return false;
     if (sd['Welcome Message Sent']) return false;
     return true;
   }).sort((a, b) => {
@@ -1008,7 +1024,7 @@ function getSetupTasksQueue() {
   return participants.filter(p => {
     if (p.isRefunded) return false;
     const sd = p.sheetData || {};
-    if (!sd['Login to Everfit']) return false;
+    if (!isValidLoginDate(sd['Login to Everfit'])) return false;
     const trainingDone = !!sd['Training Assigned'];
     const caloriesDone = !!sd['Calories Assigned'];
     return !(trainingDone && caloriesDone);
@@ -1101,7 +1117,7 @@ function getJackieFlags() {
     const hrsSincePurchase = (Date.now() - new Date(purchased).getTime()) / 3600000;
 
     // 1) Login Reachout flag — purchased 48h+, no Everfit login, reachout stale or not sent
-    if (hrsSincePurchase >= 48 && !sd['Login to Everfit']) {
+    if (hrsSincePurchase >= 48 && !isValidLoginDate(sd['Login to Everfit'])) {
       const sent = sd['Login Reachout Sent'];
       const stale = !sent || ((Date.now() - new Date(sent).getTime()) / 3600000) >= 48;
       if (stale) {
@@ -1110,7 +1126,7 @@ function getJackieFlags() {
     }
 
     // 1b) Welcome Message flag — logged in 48h+, no Welcome Message sent
-    if (sd['Login to Everfit'] && !sd['Welcome Message Sent']) {
+    if (isValidLoginDate(sd['Login to Everfit']) && !sd['Welcome Message Sent']) {
       const loginTs = new Date(sd['Login to Everfit']).getTime();
       const hrsSinceLogin = (Date.now() - loginTs) / 3600000;
       if (hrsSinceLogin >= 48) {
@@ -1279,10 +1295,21 @@ function enrich(p) {
   p.stageChangedAt = computeStageChangedAt(p);
   p.stageAgeMs = now - new Date(p.stageChangedAt).getTime();
   p.stageAge   = p.stageAgeMs;
-  p.everfitLogin      = !!p.everfitLogin;
-  p.kickoffRegistrado = !!p.kickoffRegistered;
+  // Override the boolean — Miguel's automation writes "12/31/1899" as placeholder
+  // when a participant has not yet logged in. Treat any date pre-2020 as "not logged in".
+  p.everfitLogin      = isValidLoginDate(p.sheetData && p.sheetData['Login to Everfit']);
+  p.kickoffRegistrado = isValidLoginDate(p.sheetData && p.sheetData['Register Kickoff']);
   p.isRefunded        = !!(p.sheetData && p.sheetData['Refunded']);
   return p;
+}
+
+// Returns true if the given value is a valid date >= 2020.
+// Miguel's automation writes a placeholder ("12/31/1899") for un-logged participants.
+function isValidLoginDate(val) {
+  if (!val) return false;
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return false;
+  return d.getFullYear() >= 2020;
 }
 
 // stageChangedAt = latest timestamp among any stage-related column in the sheet.
@@ -1590,6 +1617,36 @@ async function renderHistory() {
 }
 
 // ── Onboarding view ───────────────────────────────────────
+// Collapsible section state — persisted in localStorage
+function isSectionCollapsed(key) {
+  try { return localStorage.getItem('ob-section-collapsed:' + key) === '1'; }
+  catch(e) { return false; }
+}
+function toggleSection(key) {
+  const el = document.querySelector(`[data-section-key="${key}"]`);
+  if (!el) return;
+  el.classList.toggle('collapsed');
+  const collapsed = el.classList.contains('collapsed');
+  try { localStorage.setItem('ob-section-collapsed:' + key, collapsed ? '1' : '0'); }
+  catch(e) {}
+}
+function obSection(key, title, count, desc, bodyHtml) {
+  const collapsedClass = isSectionCollapsed(key) ? ' collapsed' : '';
+  return `
+    <div class="ob-section${collapsedClass}" data-section-key="${esc(key)}">
+      <div class="ob-section-header" onclick="toggleSection('${esc(key)}')">
+        <span class="ob-section-chevron">▼</span>
+        <span class="ob-section-title">${esc(title)}</span>
+        <span class="ob-section-count">${count}</span>
+      </div>
+      <div class="ob-section-body">
+        <div class="ob-section-desc">${desc}</div>
+        ${bodyHtml}
+      </div>
+    </div>
+  `;
+}
+
 function renderOnboarding() {
   document.getElementById('state-loading').style.display = 'none';
   document.getElementById('state-error').style.display   = 'none';
@@ -1605,61 +1662,47 @@ function renderOnboarding() {
   const dayLabel   = challengeDayLabel();
 
   // CC Booking section body
-  let ccBookingSection;
+  let ccBookingBody;
   if (day === null) {
-    ccBookingSection = `<div class="ob-empty">Set Challenge Start Date in ⚙️ to see CC booking outreach.</div>`;
+    ccBookingBody = `<div class="ob-empty">Set Challenge Start Date in ⚙️ to see CC booking outreach.</div>`;
   } else if (day < 2) {
-    ccBookingSection = `<div class="ob-empty">CC booking outreach starts on Day 2 (Tuesday). ${dayLabel}.</div>`;
+    ccBookingBody = `<div class="ob-empty">CC booking outreach starts on Day 2 (Tuesday). ${dayLabel}.</div>`;
   } else if (ccBooking.length === 0) {
-    ccBookingSection = `<div class="ob-empty">✨ Everyone has booked their CC.</div>`;
+    ccBookingBody = `<div class="ob-empty">✨ Everyone has booked their CC.</div>`;
   } else {
-    ccBookingSection = `<div class="ob-list">${ccBooking.map(({p, action}) => renderOnboardingCard(p, action)).join('')}</div>`;
+    ccBookingBody = `<div class="ob-list">${ccBooking.map(({p, action}) => renderOnboardingCard(p, action)).join('')}</div>`;
   }
+
+  const loginBody = noEverfit.length === 0
+    ? `<div class="ob-empty">✨ Everyone is logged into Everfit.</div>`
+    : `<div class="ob-list">${noEverfit.map(p => renderOnboardingCard(p, { type: 'login_reachout', label: 'Login Reachout', hasCopy: true })).join('')}</div>`;
+
+  const welcomeBody = welcome.length === 0
+    ? `<div class="ob-empty">✨ All welcomes sent.</div>`
+    : `<div class="ob-list">${welcome.map(p => renderOnboardingCard(p, { type: 'welcome_message', label: 'Send Welcome Message', hasCopy: true })).join('')}</div>`;
+
+  const setupBody = setup.length === 0
+    ? `<div class="ob-empty">✨ Everyone is set up.</div>`
+    : `<div class="ob-list">${setup.map(p => renderSetupTaskCard(p)).join('')}</div>`;
 
   document.getElementById('onboarding-wrap').innerHTML = `
     ${dayLabel ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">${esc(dayLabel)}</div>` : ''}
 
-    <div class="ob-section">
-      <div class="ob-section-header">
-        <span class="ob-section-title">Login Reachout</span>
-        <span class="ob-section-count">${noEverfit.length}</span>
-      </div>
-      <div class="ob-section-desc">Participants who purchased 24h+ ago and haven't logged into Everfit. Send via <strong>email</strong> (not Everfit DM — they can't receive Everfit messages yet).</div>
-      ${noEverfit.length === 0
-        ? `<div class="ob-empty">✨ Everyone is logged into Everfit.</div>`
-        : `<div class="ob-list">${noEverfit.map(p => renderOnboardingCard(p, { type: 'login_reachout', label: 'Login Reachout', hasCopy: true })).join('')}</div>`}
-    </div>
+    ${obSection('login_reachout', 'Login Reachout', noEverfit.length,
+      `Participants who purchased 24h+ ago and haven't logged into Everfit. Send via <strong>email</strong> (not Everfit DM — they can't receive Everfit messages yet).`,
+      loginBody)}
 
-    <div class="ob-section">
-      <div class="ob-section-header">
-        <span class="ob-section-title">Welcome Message</span>
-        <span class="ob-section-count">${welcome.length}</span>
-      </div>
-      <div class="ob-section-desc">Participants who logged into Everfit and haven't received a Welcome Message yet. Send via <strong>Everfit DM</strong>.</div>
-      ${welcome.length === 0
-        ? `<div class="ob-empty">✨ All welcomes sent.</div>`
-        : `<div class="ob-list">${welcome.map(p => renderOnboardingCard(p, { type: 'welcome_message', label: 'Send Welcome Message', hasCopy: true })).join('')}</div>`}
-    </div>
+    ${obSection('welcome_message', 'Welcome Message', welcome.length,
+      `Participants who logged into Everfit and haven't received a Welcome Message yet. Send via <strong>Everfit DM</strong>.`,
+      welcomeBody)}
 
-    <div class="ob-section">
-      <div class="ob-section-header">
-        <span class="ob-section-title">Setup Tasks (Training &amp; Calories)</span>
-        <span class="ob-section-count">${setup.length}</span>
-      </div>
-      <div class="ob-section-desc">Participants who logged in and still need their training plan and/or calorie targets assigned in Everfit. Check the intake form in Everfit, then assign and mark here. The list stays visible until both are marked — review daily.</div>
-      ${setup.length === 0
-        ? `<div class="ob-empty">✨ Everyone is set up.</div>`
-        : `<div class="ob-list">${setup.map(p => renderSetupTaskCard(p)).join('')}</div>`}
-    </div>
+    ${obSection('setup_tasks', 'Setup Tasks (Training & Calories)', setup.length,
+      `Participants who logged in and still need their training plan and/or calorie targets assigned in Everfit. Check the intake form in Everfit, then assign and mark here. The list stays visible until both are marked — review daily.`,
+      setupBody)}
 
-    <div class="ob-section">
-      <div class="ob-section-header">
-        <span class="ob-section-title">CC Booking Outreach</span>
-        <span class="ob-section-count">${ccBooking.length}</span>
-      </div>
-      <div class="ob-section-desc">Per Coach SOP §4.1: Day 2 DM → Day 4 Call #1 → Day 5 Call #2 → Day 6 Offer Doc. Each step shows when its scheduled day arrives.</div>
-      ${ccBookingSection}
-    </div>
+    ${obSection('cc_booking', 'CC Booking Outreach', ccBooking.length,
+      `Per Coach SOP §4.1: Day 2 DM → Day 4 Call #1 → Day 5 Call #2 → Day 6 Offer Doc. Each step shows when its scheduled day arrives.`,
+      ccBookingBody)}
   `;
 }
 
@@ -1671,8 +1714,8 @@ function renderSetupTaskCard(p) {
   const trainingDone = !!sd['Training Assigned'];
   const caloriesDone = !!sd['Calories Assigned'];
 
-  // Days since login
-  const loginTs = sd['Login to Everfit'] ? new Date(sd['Login to Everfit']).getTime() : null;
+  // Days since login (use validated date — Miguel's automation writes "12/31/1899" as placeholder)
+  const loginTs = isValidLoginDate(sd['Login to Everfit']) ? new Date(sd['Login to Everfit']).getTime() : null;
   const daysSinceLogin = loginTs ? Math.floor((Date.now() - loginTs) / 86400000) : null;
   const loginLabel = daysSinceLogin === null ? '' :
     daysSinceLogin === 0 ? 'Logged in today' :
