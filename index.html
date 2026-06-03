@@ -2133,7 +2133,7 @@ async function openModal(emailOrId) {
   document.getElementById('m-email').textContent   = p.email  || '—';
   document.getElementById('m-phone').innerHTML     = formatPhone(p.phone);
   document.getElementById('m-source').textContent  = formatSource(p.source);
-  document.getElementById('m-everfit').innerHTML   = indBadge(p.everfitLogin);
+  document.getElementById('m-everfit').innerHTML   = renderEverfitLogin(p);
   document.getElementById('m-kickoff').innerHTML   = indBadge(p.kickoffRegistrado);
   document.getElementById('m-history').innerHTML   = formatHistory(p.previousChallenges);
 
@@ -2191,6 +2191,64 @@ function indBadge(yes) {
   return yes
     ? '<span class="ind ind-yes">✓ Yes</span>'
     : '<span class="ind ind-no">✗ No</span>';
+}
+
+// Renders the Everfit Login indicator + a "Mark as logged in" override button
+// when the participant is not yet marked. The Zapier from Everfit can fail to
+// fire, so we need a manual way to correct the state.
+function renderEverfitLogin(p) {
+  if (p.everfitLogin) {
+    return '<span class="ind ind-yes">✓ Yes</span>';
+  }
+  return `<span class="ind ind-no">✗ No</span>
+    <button class="btn btn-ghost btn-sm" style="margin-left:6px;font-size:11px;padding:2px 8px"
+      onclick="markLoggedInToEverfit()">Mark as logged in</button>`;
+}
+
+async function markLoggedInToEverfit() {
+  if (!activeContact) return;
+  const target = activeContact;
+  if (!confirm(`Mark ${target.name} as logged into Everfit? Use this only if you confirmed they're actually in Everfit but the automation didn't update.`)) return;
+
+  const nameParts = (target.name || '').trim().split(/\s+/);
+  const nowIso = new Date().toISOString();
+
+  // Optimistic
+  const prev = (target.sheetData && target.sheetData['Login to Everfit']) || null;
+  if (!target.sheetData) target.sheetData = {};
+  target.sheetData['Login to Everfit'] = nowIso;
+  target.everfitLogin = true;
+
+  // Re-render
+  document.getElementById('m-everfit').innerHTML = renderEverfitLogin(target);
+  renderOutreachSection(target);
+  renderStats(); renderFilters();
+  if (activeView === 'tracker') renderTable();
+  else if (activeView === 'onboarding') renderOnboarding();
+  else if (activeView === 'accountability') renderAccountability();
+
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'recordEvent',
+        email: target.email,
+        column: 'Login to Everfit',
+        firstName: nameParts[0] || '',
+        lastName: nameParts.slice(1).join(' ') || '',
+        timestamp: nowIso
+      })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Save error');
+  } catch(err) {
+    target.sheetData['Login to Everfit'] = prev;
+    target.everfitLogin = !!prev && new Date(prev).getFullYear() >= 2020;
+    document.getElementById('m-everfit').innerHTML = renderEverfitLogin(target);
+    renderStats(); renderFilters();
+    alert('Could not save: ' + err.message);
+  }
 }
 
 // Format phone as a clickable tel: link
