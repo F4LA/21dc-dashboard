@@ -2193,16 +2193,58 @@ function indBadge(yes) {
     : '<span class="ind ind-no">✗ No</span>';
 }
 
-// Renders the Everfit Login indicator + a "Mark as logged in" override button
-// when the participant is not yet marked. The Zapier from Everfit can fail to
-// fire, so we need a manual way to correct the state.
+// Renders the Everfit Login indicator + an override button in both directions:
+//  - When ✗ No: "Mark as logged in" (sets timestamp) — for when Zapier didn't fire
+//  - When ✓ Yes: "Mark as NOT logged in" (clears timestamp) — for false positives
+// The Zapier from Everfit can be unreliable, so we need manual control both ways.
 function renderEverfitLogin(p) {
   if (p.everfitLogin) {
-    return '<span class="ind ind-yes">✓ Yes</span>';
+    return `<span class="ind ind-yes">✓ Yes</span>
+      <button class="btn btn-ghost btn-sm" style="margin-left:6px;font-size:11px;padding:2px 8px;color:#991b1b"
+        onclick="markAsNotLoggedInToEverfit()">Mark as NOT logged in</button>`;
   }
   return `<span class="ind ind-no">✗ No</span>
     <button class="btn btn-ghost btn-sm" style="margin-left:6px;font-size:11px;padding:2px 8px"
       onclick="markLoggedInToEverfit()">Mark as logged in</button>`;
+}
+
+async function markAsNotLoggedInToEverfit() {
+  if (!activeContact) return;
+  const target = activeContact;
+  if (!confirm(`Mark ${target.name} as NOT logged into Everfit? Use this when the Login to Everfit timestamp is wrong (e.g. Zapier fired but the participant is still pending in Everfit).`)) return;
+
+  const prev = (target.sheetData && target.sheetData['Login to Everfit']) || null;
+  if (!target.sheetData) target.sheetData = {};
+  target.sheetData['Login to Everfit'] = '';
+  target.everfitLogin = false;
+
+  // Re-render
+  document.getElementById('m-everfit').innerHTML = renderEverfitLogin(target);
+  renderOutreachSection(target);
+  renderStats(); renderFilters();
+  if (activeView === 'tracker') renderTable();
+  else if (activeView === 'onboarding') renderOnboarding();
+  else if (activeView === 'accountability') renderAccountability();
+
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'clearEvent',
+        email: target.email,
+        column: 'Login to Everfit'
+      })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Save error');
+  } catch(err) {
+    target.sheetData['Login to Everfit'] = prev;
+    target.everfitLogin = isValidLoginDate(prev);
+    document.getElementById('m-everfit').innerHTML = renderEverfitLogin(target);
+    renderStats(); renderFilters();
+    alert('Could not save: ' + err.message);
+  }
 }
 
 async function markLoggedInToEverfit() {
