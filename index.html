@@ -1509,6 +1509,14 @@ async function loadData() {
       window.__challengeStartDate = configJson.data.challengeStartDate;
     }
 
+    // Stash challenge costs for the active challenge if Apps Script provided them.
+    // Shape: { adCost, affiliateCost, otherCosts, otherNotes }
+    if (configJson.success && configJson.data.challengeCosts) {
+      window.__challengeCosts = configJson.data.challengeCosts;
+    } else {
+      window.__challengeCosts = { adCost: 0, affiliateCost: 0, otherCosts: 0, otherNotes: '' };
+    }
+
     participants = json.data.map(enrich);
     renderStats();
     renderFilters();
@@ -1943,6 +1951,14 @@ function renderChallengeDetail(c) {
   const total = c.total || 0;
   const didntPurchase = Math.max(0, (c.attendedDC || 0) - (c.purchased || 0));
 
+  const adCost        = parseFloat(c.adCost) || 0;
+  const affiliateCost = parseFloat(c.affiliateCost) || 0;
+  const otherCosts    = parseFloat(c.otherCosts) || 0;
+  const totalCosts    = adCost + affiliateCost + otherCosts;
+  const totalRev      = parseFloat(c.totalRev) || 0;
+  const netProfit     = totalRev - totalCosts;
+  const blendedCAC    = total > 0 ? (adCost + affiliateCost) / total : 0;
+
   const funnelStep = (label, value) => `
     <div class="funnel-step">
       <span class="funnel-step-label">${esc(label)}</span>
@@ -1953,6 +1969,46 @@ function renderChallengeDetail(c) {
       <span class="funnel-connector-arrow">↓</span>
       <span class="funnel-connector-pct">${pctSafe(to, from)}</span>
       <span>converted</span>
+    </div>`;
+
+  const costsCardHtml = totalCosts > 0 ? `
+    <div class="hist-detail-card">
+      <div class="hist-detail-card-title">Costs &amp; Profitability</div>
+      <div class="an-row">
+        <span class="an-row-label">Ad cost</span>
+        <span class="an-row-value" style="color:#991b1b">−${fmtMoney(adCost)}</span>
+      </div>
+      <div class="an-row">
+        <span class="an-row-label">Affiliate cost</span>
+        <span class="an-row-value" style="color:#991b1b">−${fmtMoney(affiliateCost)}</span>
+      </div>
+      ${otherCosts > 0 ? `
+      <div class="an-row">
+        <div>
+          <span class="an-row-label">Other costs</span>
+          ${c.otherNotes ? `<span class="an-row-meta">${esc(c.otherNotes)}</span>` : ''}
+        </div>
+        <span class="an-row-value" style="color:#991b1b">−${fmtMoney(otherCosts)}</span>
+      </div>` : ''}
+      <div class="an-row">
+        <span class="an-row-label">Total costs</span>
+        <span class="an-row-value" style="color:#991b1b">−${fmtMoney(totalCosts)}</span>
+      </div>
+      <div class="an-row an-row-total">
+        <span class="an-row-label">Net profit</span>
+        <span class="an-row-value" style="color:${netProfit >= 0 ? '#065f46' : '#991b1b'}">${fmtMoney(netProfit)}</span>
+      </div>
+      <div class="an-row">
+        <div>
+          <span class="an-row-label">Blended CAC</span>
+          <span class="an-row-meta">(ad + affiliate) / ${total} participants</span>
+        </div>
+        <span class="an-row-value">${fmtMoney(blendedCAC)}</span>
+      </div>
+    </div>` : `
+    <div class="hist-detail-card" style="border-style:dashed">
+      <div class="hist-detail-card-title">Costs &amp; Profitability</div>
+      <div style="font-size:12px;color:var(--text-muted);padding:6px 0">No cost data for this challenge.</div>
     </div>`;
 
   return `
@@ -1970,10 +2026,8 @@ function renderChallengeDetail(c) {
       <div class="hist-detail-card">
         <div class="hist-detail-card-title">Revenue & Products</div>
         <div class="an-row">
-          <div>
-            <span class="an-row-label">Total revenue</span>
-          </div>
-          <span class="an-row-value">${fmtMoney(c.totalRev || 0)}</span>
+          <span class="an-row-label">Total revenue</span>
+          <span class="an-row-value">${fmtMoney(totalRev)}</span>
         </div>
         <div class="an-row">
           <div>
@@ -1997,6 +2051,7 @@ function renderChallengeDetail(c) {
           <span class="an-row-value">${didntPurchase}</span>
         </div>
       </div>
+      ${costsCardHtml}
     </div>
   `;
 }
@@ -2399,6 +2454,29 @@ function computeFunnel() {
   const netTotal = grossTotal - refundCount;
   const purchased = purchase101Count + purchaseGCCount;
   const challengeRevenueNet = challengeRevenueGross - refundRevenue;
+
+  // Pull challenge costs from window (loaded from Apps Script config)
+  const costs = window.__challengeCosts || { adCost: 0, affiliateCost: 0, otherCosts: 0, otherNotes: '' };
+  const adCost        = parseFloat(costs.adCost) || 0;
+  const affiliateCost = parseFloat(costs.affiliateCost) || 0;
+  const otherCosts    = parseFloat(costs.otherCosts) || 0;
+  const totalCosts    = adCost + affiliateCost + otherCosts;
+  const totalRevenue  = challengeRevenueNet + purchase101Revenue + purchaseGCRevenue;
+  const netProfit     = totalRevenue - totalCosts;
+
+  // CAC calculations
+  // Blended CAC: total acquisition cost (ad + affiliate) / total participants (net)
+  const blendedCAC = netTotal > 0 ? (adCost + affiliateCost) / netTotal : 0;
+  // Paid Ads CAC: ad spend / participants from paid sources
+  const paidSources = ['meta ads', 'ads', 'manychat ads'];
+  let paidParticipants = 0;
+  participants.forEach(p => {
+    if (p.isRefunded) return;
+    const src = (p.source || '').toLowerCase().trim();
+    if (paidSources.includes(src)) paidParticipants++;
+  });
+  const paidAdsCAC = paidParticipants > 0 ? adCost / paidParticipants : 0;
+
   return {
     grossTotal, netTotal, refundCount, refundRevenue,
     total: netTotal,   // alias for funnel base
@@ -2407,8 +2485,13 @@ function computeFunnel() {
     purchase101Revenue, purchaseGCRevenue,
     challengeRevenue: challengeRevenueGross,
     challengeRevenueNet,
-    totalRevenue: challengeRevenueNet + purchase101Revenue + purchaseGCRevenue,
-    sourceCount
+    totalRevenue,
+    sourceCount,
+    // Costs + profit
+    adCost, affiliateCost, otherCosts, totalCosts, netProfit,
+    otherNotes: costs.otherNotes || '',
+    // CAC
+    blendedCAC, paidAdsCAC, paidParticipants
   };
 }
 
@@ -2508,6 +2591,62 @@ function renderAnalytics() {
           <span class="an-row-value">${fmtMoney(f.totalRevenue)}</span>
         </div>
       </div>
+
+      ${f.totalCosts > 0 ? `
+      <div class="an-card" style="margin-bottom:24px">
+        <div class="an-card-title">Costs &amp; Profitability</div>
+        <div class="an-row">
+          <div>
+            <span class="an-row-label">Ad cost</span>
+          </div>
+          <span class="an-row-value" style="color:#991b1b">−${fmtMoney(f.adCost)}</span>
+        </div>
+        <div class="an-row">
+          <div>
+            <span class="an-row-label">Affiliate cost</span>
+          </div>
+          <span class="an-row-value" style="color:#991b1b">−${fmtMoney(f.affiliateCost)}</span>
+        </div>
+        ${f.otherCosts > 0 ? `
+        <div class="an-row">
+          <div>
+            <span class="an-row-label">Other costs</span>
+            ${f.otherNotes ? `<span class="an-row-meta">${esc(f.otherNotes)}</span>` : ''}
+          </div>
+          <span class="an-row-value" style="color:#991b1b">−${fmtMoney(f.otherCosts)}</span>
+        </div>` : ''}
+        <div class="an-row">
+          <div>
+            <span class="an-row-label">Total costs</span>
+          </div>
+          <span class="an-row-value" style="color:#991b1b">−${fmtMoney(f.totalCosts)}</span>
+        </div>
+        <div class="an-row an-row-total">
+          <span class="an-row-label">Net profit</span>
+          <span class="an-row-value" style="color:${f.netProfit >= 0 ? '#065f46' : '#991b1b'}">${fmtMoney(f.netProfit)}</span>
+        </div>
+        <div class="an-row">
+          <div>
+            <span class="an-row-label">Blended CAC</span>
+            <span class="an-row-meta">(ad + affiliate) / ${f.netTotal} net participants</span>
+          </div>
+          <span class="an-row-value">${fmtMoney(f.blendedCAC)}</span>
+        </div>
+        ${f.paidParticipants > 0 ? `
+        <div class="an-row">
+          <div>
+            <span class="an-row-label">Paid Ads CAC</span>
+            <span class="an-row-meta">ad spend / ${f.paidParticipants} paid-source participants</span>
+          </div>
+          <span class="an-row-value">${fmtMoney(f.paidAdsCAC)}</span>
+        </div>` : ''}
+      </div>` : `
+      <div class="an-card" style="margin-bottom:24px;border:1px dashed var(--border)">
+        <div class="an-card-title">Costs &amp; Profitability</div>
+        <div style="font-size:13px;color:var(--text-muted);padding:8px 0">
+          No cost data for this challenge yet. Add ad cost, affiliate cost, and other costs to the <strong>Challenge Costs</strong> tab in the spreadsheet.
+        </div>
+      </div>`}
 
       <div class="an-card" style="margin-bottom:24px">
         <div class="an-card-title">Product Breakdown</div>
