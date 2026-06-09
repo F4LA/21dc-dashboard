@@ -2011,6 +2011,15 @@ function renderChallengeDetail(c) {
       <div style="font-size:12px;color:var(--text-muted);padding:6px 0">No cost data for this challenge.</div>
     </div>`;
 
+  const aiButtonHtml = `
+    <div class="hist-detail-card" style="grid-column: span 2">
+      <div class="hist-detail-card-title">AI Analysis</div>
+      <button class="btn btn-primary" onclick="runHistAIAnalysis('${esc(c.challenge)}', this)">
+        ✨ Analyze ${esc(c.challenge)}
+      </button>
+      <div class="hist-ai-result" data-challenge="${esc(c.challenge)}" style="margin-top:12px"></div>
+    </div>`;
+
   return `
     <div class="hist-detail-inner">
       <div class="hist-detail-card">
@@ -2052,8 +2061,22 @@ function renderChallengeDetail(c) {
         </div>
       </div>
       ${costsCardHtml}
+      ${aiButtonHtml}
     </div>
   `;
+}
+
+// AI analysis specifically for a historical challenge — renders into its own result element
+async function runHistAIAnalysis(challengeName, btn) {
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = '⏳ Analyzing…';
+
+  const resultEl = btn.parentElement.querySelector('.hist-ai-result');
+  await runAIAnalysis(challengeName, resultEl);
+
+  btn.disabled = false;
+  btn.textContent = '✨ Re-analyze ' + challengeName;
 }
 
 // ── Onboarding view ───────────────────────────────────────
@@ -2677,8 +2700,90 @@ function renderAnalytics() {
         <div class="an-card-title">Source Breakdown</div>
         ${renderSourceRows(f.sourceCount, f.total)}
       </div>
+
+      <div class="an-card" id="ai-analysis-card" style="grid-column: span 2; margin-top:24px">
+        <div class="an-card-title">AI Analysis</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">
+          Get an AI-powered analysis of this challenge: funnel performance vs prior challenges, source quality, affiliate efficiency, profitability, and concrete recommendations.
+        </div>
+        <button class="btn btn-primary" id="ai-analyze-btn" onclick="runAIAnalysis()">
+          ✨ Analyze this challenge
+        </button>
+        <div id="ai-analysis-result" style="margin-top:16px"></div>
+      </div>
     </div>
   `;
+}
+
+// ── AI Analysis ──────────────────────────────────────────
+// Calls the Apps Script analyzeChallenge endpoint and renders the result.
+async function runAIAnalysis(challengeName, targetEl) {
+  const btn = targetEl ? null : document.getElementById('ai-analyze-btn');
+  const resultEl = targetEl || document.getElementById('ai-analysis-result');
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Analyzing… (10-30 sec)';
+  }
+  resultEl.innerHTML = `
+    <div style="padding:16px;background:var(--bg);border-radius:8px;font-size:13px;color:var(--text-muted)">
+      <div class="spinner" style="display:inline-block;width:14px;height:14px;vertical-align:middle;margin-right:8px"></div>
+      Sending data to Claude and waiting for analysis…
+    </div>
+  `;
+
+  try {
+    const url = SCRIPT_URL + '?action=analyzeChallenge' +
+                (challengeName ? '&challenge=' + encodeURIComponent(challengeName) : '');
+    const res = await fetch(url);
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Analysis failed');
+
+    const analysisHtml = renderMarkdown(json.data.analysis || '(empty response)');
+    resultEl.innerHTML = `
+      <div style="padding:16px 20px;background:var(--bg);border-radius:8px;font-size:13px;line-height:1.6;color:var(--text-primary)">
+        ${analysisHtml}
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:var(--text-muted)">
+        Generated ${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})} ·
+        Model: ${esc(json.data.model || 'claude')}
+      </div>
+    `;
+  } catch(err) {
+    resultEl.innerHTML = `
+      <div style="padding:14px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:13px;color:#991b1b">
+        ❌ Analysis failed: ${esc(err.message)}
+      </div>
+    `;
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '✨ Re-analyze this challenge';
+    }
+  }
+}
+
+// Minimal markdown renderer — handles headings, bold, italic, lists, links, line breaks
+function renderMarkdown(md) {
+  let html = esc(md);
+  // Headings
+  html = html.replace(/^### (.+)$/gm, '<h4 style="margin:14px 0 6px 0;font-size:14px;color:var(--text-primary)">$1</h4>');
+  html = html.replace(/^## (.+)$/gm, '<h3 style="margin:18px 0 8px 0;font-size:15px;color:var(--text-primary)">$1</h3>');
+  html = html.replace(/^# (.+)$/gm, '<h2 style="margin:20px 0 10px 0;font-size:17px;color:var(--text-primary)">$1</h2>');
+  // Bold + italic
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // Lists (simple)
+  html = html.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
+  html = html.replace(/(<li>.+?<\/li>(?:\s*<li>.+?<\/li>)*)/gs, '<ul style="padding-left:20px;margin:6px 0">$1</ul>');
+  // Numbered lists
+  html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+  // Line breaks (preserve paragraphs)
+  html = html.replace(/\n\n/g, '</p><p style="margin:8px 0">');
+  html = '<p style="margin:8px 0">' + html + '</p>';
+  // Clean up empty paragraphs
+  html = html.replace(/<p style="margin:8px 0">\s*<\/p>/g, '');
+  return html;
 }
 
 function renderSourceRows(sourceCount, total) {
