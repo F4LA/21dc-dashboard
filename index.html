@@ -102,6 +102,40 @@
 
     .filter-bar { display: flex; gap: 6px; flex-wrap: wrap; }
 
+    .search-wrap {
+      position: relative; display: none;
+    }
+    .search-wrap.visible { display: block; }
+    .search-input {
+      padding: 6px 12px 6px 32px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 13px;
+      min-width: 240px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .search-input:focus { border-color: var(--accent, #5b3def); }
+    .search-input::placeholder { color: var(--text-muted); }
+    .search-icon {
+      position: absolute; left: 11px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted); font-size: 13px;
+      pointer-events: none;
+    }
+    .search-clear {
+      position: absolute; right: 8px; top: 50%;
+      transform: translateY(-50%);
+      cursor: pointer; color: var(--text-muted);
+      font-size: 16px; line-height: 1;
+      padding: 2px 6px; border-radius: 50%;
+      display: none;
+    }
+    .search-clear.visible { display: block; }
+    .search-clear:hover { background: var(--off-white, #f3f4f6); color: var(--text); }
+
     .filter-chip {
       padding: 4px 12px; border-radius: 20px; font-size: 12px;
       cursor: pointer; border: 1px solid var(--border);
@@ -512,7 +546,39 @@
       border-bottom: 1px solid var(--border);
     }
     .hist-table tr:last-child td { border-bottom: none; }
-    .hist-table tr:hover td { background: var(--bg); }
+    .hist-table tbody tr.hist-row { cursor: pointer; transition: background 0.15s; }
+    .hist-table tbody tr.hist-row:hover td { background: var(--bg); }
+    .hist-table tbody tr.hist-row.expanded td { background: var(--accent-light, #ede9fe); }
+    .hist-chevron {
+      display: inline-flex;
+      align-items: center; justify-content: center;
+      font-size: 10px;
+      color: var(--accent, #5b3def);
+      background: var(--accent-light, #ede9fe);
+      width: 20px; height: 20px; border-radius: 50%;
+      margin-right: 8px;
+      transition: transform 0.2s ease;
+      font-weight: 700;
+    }
+    .hist-row.expanded .hist-chevron { transform: rotate(90deg); }
+    .hist-detail-row td {
+      padding: 0 !important;
+      background: var(--off-white, #f8f9fa);
+    }
+    .hist-detail-row.hidden { display: none; }
+    .hist-detail-inner {
+      padding: 20px 24px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+    }
+    @media (max-width: 800px) { .hist-detail-inner { grid-template-columns: 1fr; } }
+    .hist-detail-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 16px 18px;
+    }
+    .hist-detail-card-title {
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 12px;
+    }
     .hist-challenge { font-weight: 600; font-size: 14px; }
     .hist-pct { color: var(--text-muted); font-size: 11px; margin-left: 5px; }
     .hist-revenue { color: var(--success); font-weight: 600; }
@@ -703,7 +769,11 @@
 
   <div class="toolbar">
     <div class="filter-bar" id="filter-bar"></div>
-    <div style="font-size:12px;color:var(--text-muted)" id="sort-label"></div>
+    <div class="search-wrap" id="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="search-input" class="search-input" placeholder="Search by name or email…" oninput="setSearch(this.value)" />
+      <span class="search-clear" id="search-clear" onclick="setSearch('');document.getElementById('search-input').value='';document.getElementById('search-input').focus()" title="Clear search">×</span>
+    </div>
   </div>
 
   <div class="table-wrap">
@@ -857,6 +927,7 @@ let activeView   = 'tracker';   // 'tracker' or 'queue'
 let sortKey = 'stageAge';
 let sortDir  = -1;
 let activeContact = null;
+let searchQuery = '';
 
 // ── View tabs ─────────────────────────────────────────────
 function setView(view) {
@@ -1384,6 +1455,13 @@ function renderFilters() {
   document.getElementById('onboarding-count').textContent     = getOnboardingCount();
   document.getElementById('accountability-count').textContent = getAccountabilityCount();
 
+  // Search bar visible in tracker + queue (where the table is shown)
+  const searchWrap = document.getElementById('search-wrap');
+  if (searchWrap) {
+    const showSearch = (activeView === 'tracker' || activeView === 'queue');
+    searchWrap.classList.toggle('visible', showSearch);
+  }
+
   // Filters only show in tracker view
   if (activeView !== 'tracker') {
     document.getElementById('filter-bar').innerHTML = '';
@@ -1405,6 +1483,17 @@ function setFilter(id) {
   activeFilter = id;
   renderFilters();
   renderTable();
+}
+
+function setSearch(value) {
+  searchQuery = (value || '').toLowerCase().trim();
+  const clearBtn = document.getElementById('search-clear');
+  if (clearBtn) clearBtn.classList.toggle('visible', searchQuery.length > 0);
+  // Only re-render table if we're in tracker view
+  if (activeView === 'tracker' || activeView === 'queue') {
+    renderTable();
+    renderFilters();   // counts may have changed
+  }
 }
 
 // ── Sort ──────────────────────────────────────────────────
@@ -1435,6 +1524,15 @@ function getFiltered() {
   } else {
     // 'all' filter still includes refunded so they're visible somewhere by default
     list = [...participants];
+  }
+
+  // Apply search query (matches name and email, case-insensitive)
+  if (searchQuery) {
+    list = list.filter(p => {
+      const name = (p.name || '').toLowerCase();
+      const email = (p.email || '').toLowerCase();
+      return name.includes(searchQuery) || email.includes(searchQuery);
+    });
   }
 
   list.sort((a,b) => {
@@ -1512,7 +1610,16 @@ function renderTrackerTable() {
 }
 
 function renderQueueTable() {
-  const queue = getActionQueue();
+  let queue = getActionQueue();
+
+  // Apply search query if present
+  if (searchQuery) {
+    queue = queue.filter(({ p }) => {
+      const name = (p.name || '').toLowerCase();
+      const email = (p.email || '').toLowerCase();
+      return name.includes(searchQuery) || email.includes(searchQuery);
+    });
+  }
 
   // Change headers for queue context
   document.getElementById('th-name').textContent  = 'Participant';
@@ -1609,10 +1716,21 @@ async function renderHistory() {
     return;
   }
 
-  const rows = historicalData.map(c => {
-    const pct = (n, d) => d ? Math.round((n / d) * 100) + '%' : '—';
-    return `<tr>
-      <td><span class="hist-challenge">${esc(c.challenge)}</span></td>
+  // Sort challenges chronologically (newest first). Challenge names are in
+  // "YYYY-MM" format → string sort works alphabetically.
+  const sorted = [...historicalData].sort((a, b) =>
+    (b.challenge || '').localeCompare(a.challenge || '')
+  );
+
+  const pct = (n, d) => d ? Math.round((n / d) * 100) + '%' : '—';
+
+  const rows = sorted.map((c, idx) => {
+    const rowKey = `hist-${idx}`;
+    return `<tr class="hist-row" data-row-key="${rowKey}" onclick="toggleHistRow('${rowKey}')">
+      <td>
+        <span class="hist-chevron">▶</span>
+        <span class="hist-challenge">${esc(c.challenge)}</span>
+      </td>
       <td>${c.total}</td>
       <td>${c.attendedCC}<span class="hist-pct">${pct(c.attendedCC, c.total)}</span></td>
       <td>${c.attendedDC}<span class="hist-pct">${pct(c.attendedDC, c.total)}</span></td>
@@ -1620,6 +1738,9 @@ async function renderHistory() {
       <td>${c.purchase101 || 0}</td>
       <td>${c.purchaseGC || 0}</td>
       <td class="hist-revenue">${fmtMoney(c.totalRev || 0)}</td>
+    </tr>
+    <tr class="hist-detail-row hidden" data-detail-key="${rowKey}">
+      <td colspan="8">${renderChallengeDetail(c)}</td>
     </tr>`;
   }).join('');
 
@@ -1639,6 +1760,79 @@ async function renderHistory() {
       </thead>
       <tbody>${rows}</tbody>
     </table>
+  `;
+}
+
+function toggleHistRow(rowKey) {
+  const row = document.querySelector(`[data-row-key="${rowKey}"]`);
+  const detail = document.querySelector(`[data-detail-key="${rowKey}"]`);
+  if (!row || !detail) return;
+  const isExpanded = row.classList.toggle('expanded');
+  detail.classList.toggle('hidden', !isExpanded);
+}
+
+// Renders the expanded detail view for one challenge in History.
+// Uses the aggregated data we already have from getHistorical.
+function renderChallengeDetail(c) {
+  const pctSafe = (n, d) => d ? Math.round((n / d) * 100) + '%' : '—';
+  const total = c.total || 0;
+  const didntPurchase = Math.max(0, (c.attendedDC || 0) - (c.purchased || 0));
+
+  const funnelStep = (label, value) => `
+    <div class="funnel-step">
+      <span class="funnel-step-label">${esc(label)}</span>
+      <span class="funnel-step-value">${value}</span>
+    </div>`;
+  const connector = (from, to) => `
+    <div class="funnel-connector">
+      <span class="funnel-connector-arrow">↓</span>
+      <span class="funnel-connector-pct">${pctSafe(to, from)}</span>
+      <span>converted</span>
+    </div>`;
+
+  return `
+    <div class="hist-detail-inner">
+      <div class="hist-detail-card">
+        <div class="hist-detail-card-title">Funnel — ${esc(c.challenge)}</div>
+        ${funnelStep('Total enrolled', total)}
+        ${connector(total, c.attendedCC || 0)}
+        ${funnelStep('Attended CC', c.attendedCC || 0)}
+        ${connector(c.attendedCC || 0, c.attendedDC || 0)}
+        ${funnelStep('Attended DC', c.attendedDC || 0)}
+        ${connector(c.attendedDC || 0, c.purchased || 0)}
+        ${funnelStep('Purchased', c.purchased || 0)}
+      </div>
+      <div class="hist-detail-card">
+        <div class="hist-detail-card-title">Revenue & Products</div>
+        <div class="an-row">
+          <div>
+            <span class="an-row-label">Total revenue</span>
+          </div>
+          <span class="an-row-value">${fmtMoney(c.totalRev || 0)}</span>
+        </div>
+        <div class="an-row">
+          <div>
+            <span class="an-row-label">1-on-1 purchases</span>
+            <span class="an-row-meta">${pctSafe(c.purchase101 || 0, c.attendedDC || 0)} of attended DC</span>
+          </div>
+          <span class="an-row-value">${c.purchase101 || 0}</span>
+        </div>
+        <div class="an-row">
+          <div>
+            <span class="an-row-label">Group Coaching purchases</span>
+            <span class="an-row-meta">${pctSafe(c.purchaseGC || 0, c.attendedDC || 0)} of attended DC</span>
+          </div>
+          <span class="an-row-value">${c.purchaseGC || 0}</span>
+        </div>
+        <div class="an-row">
+          <div>
+            <span class="an-row-label">Didn't purchase</span>
+            <span class="an-row-meta">${pctSafe(didntPurchase, c.attendedDC || 0)} of attended DC</span>
+          </div>
+          <span class="an-row-value">${didntPurchase}</span>
+        </div>
+      </div>
+    </div>
   `;
 }
 
