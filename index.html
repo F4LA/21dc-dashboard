@@ -360,71 +360,6 @@
     .queue-empty-emoji { font-size: 36px; margin-bottom: 10px; }
 
     /* ── Onboarding view ─────────────────────────────────── */
-    /* ── Today view (Dennis's daily call worklist) ─────────── */
-    .today-wrap { padding: 0; }
-    .today-header {
-      font-size: 13px; color: var(--accent, #5b3def);
-      font-weight: 600; letter-spacing: 0.2px;
-      margin: 4px 0 20px 4px;
-    }
-    .today-section {
-      margin-bottom: 28px;
-      background: var(--surface, #fff);
-      border: 1px solid var(--border, #e5e7eb);
-      border-radius: 12px;
-      padding: 20px 24px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-    }
-    .today-section-header {
-      display: flex; align-items: baseline; gap: 10px;
-      margin-bottom: 6px;
-    }
-    .today-section-title { font-size: 17px; font-weight: 600; color: var(--text-primary); }
-    .today-section-count {
-      background: var(--accent-light, #ede9fe); color: var(--accent, #5b3def);
-      padding: 1px 9px; border-radius: 12px;
-      font-size: 12px; font-weight: 600;
-    }
-    .today-section-desc {
-      font-size: 13px; color: var(--text-muted);
-      margin-bottom: 14px;
-    }
-    .today-list { display: flex; flex-direction: column; gap: 8px; }
-    .today-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 8px; padding: 14px 16px;
-      display: grid; grid-template-columns: auto 1fr auto; align-items: center;
-      gap: 14px; cursor: pointer; transition: all 0.15s;
-    }
-    .today-card:hover { border-color: var(--accent); background: var(--bg); }
-    .today-card.unprocessed { border-left: 3px solid #ef4444; }
-    .today-card.in-future { opacity: 0.7; }
-    .today-card-info { min-width: 0; }
-    .today-card-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
-    .today-card-meta {
-      font-size: 12px; color: var(--text-muted); margin-top: 3px;
-      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-    }
-    .today-card-time {
-      font-size: 13px; font-weight: 600; color: var(--accent, #5b3def);
-      white-space: nowrap;
-    }
-    .today-card-status {
-      font-size: 11px; padding: 2px 8px; border-radius: 12px;
-      font-weight: 600;
-    }
-    .today-card-status.pending { background: #fef3c7; color: #92400e; }
-    .today-card-status.processed { background: #d1fae5; color: #065f46; }
-    .today-card-status.upcoming { background: #dbeafe; color: #1e40af; }
-    .today-empty {
-      text-align: center; padding: 40px 20px; color: var(--text-muted);
-      background: var(--surface); border-radius: 8px; border: 1px dashed var(--border);
-    }
-    @media (max-width: 700px) {
-      .today-card { grid-template-columns: auto 1fr; }
-      .today-card-time { grid-column: 2; }
-    }
-
     .onboarding-wrap { padding: 0; }
     .ob-section {
       margin-bottom: 28px;
@@ -769,10 +704,6 @@
 <!-- ── View tabs ─────────────────────────────────────────── -->
 <div class="view-tabs">
   <button class="view-tab active" data-view="tracker" onclick="setView('tracker')">Tracker</button>
-  <button class="view-tab" data-view="today" onclick="setView('today')">
-    Today
-    <span class="view-tab-count" id="today-count">0</span>
-  </button>
   <button class="view-tab" data-view="queue" onclick="setView('queue')">
     Action Queue
     <span class="view-tab-count" id="queue-count">0</span>
@@ -877,9 +808,6 @@
       </thead>
       <tbody id="tbody"></tbody>
     </table>
-
-    <!-- Today view (Dennis's daily call worklist) -->
-    <div class="today-wrap" id="today-wrap" style="display:none"></div>
 
     <!-- Onboarding view -->
     <div class="onboarding-wrap" id="onboarding-wrap" style="display:none"></div>
@@ -1011,14 +939,12 @@ function setView(view) {
   renderFilters();
 
   // Hide all view containers
-  document.getElementById('today-wrap').style.display          = 'none';
   document.getElementById('onboarding-wrap').style.display     = 'none';
   document.getElementById('accountability-wrap').style.display = 'none';
   document.getElementById('analytics-wrap').style.display      = 'none';
   document.getElementById('history-wrap').style.display        = 'none';
 
-  if (view === 'today')               renderToday();
-  else if (view === 'onboarding')     renderOnboarding();
+  if (view === 'onboarding')          renderOnboarding();
   else if (view === 'accountability') renderAccountability();
   else if (view === 'analytics')      renderAnalytics();
   else if (view === 'history')        renderHistory();
@@ -1273,24 +1199,6 @@ function getDennisFlags() {
     flags.push({ p, issue: latestCol.replace('Reschedule ', '') + ' done — ' + nextStep + ' overdue', hrs: hrsSince });
   });
 
-  // Unprocessed calls: CC or DC scheduled time has passed (2h+ ago) but stage didn't advance
-  participants.forEach(p => {
-    if (p.isRefunded) return;
-    const sd = p.sheetData || {};
-
-    ['CC', 'DC'].forEach(callType => {
-      if (!isCallUnprocessed(p, callType)) return;
-      const col = callType === 'CC' ? 'CC Scheduled' : 'DC Scheduled';
-      const scheduledTs = new Date(sd[col]).getTime();
-      const hrsSinceCall = (Date.now() - scheduledTs) / 3600000;
-      flags.push({
-        p,
-        issue: `${callType} happened ${Math.floor(hrsSinceCall)}h ago — stage not updated`,
-        hrs: hrsSinceCall
-      });
-    });
-  });
-
   return flags.sort((a, b) => b.hrs - a.hrs);
 }
 
@@ -1352,76 +1260,10 @@ function getAccountabilityCount() {
   return getDennisFlags().length + getJackieFlags().length;
 }
 
-// ── Today (Dennis's daily call worklist) ──────────────────
-// Returns list of participants who have a CC or DC scheduled for today.
-// callType = 'CC' | 'DC'
-function getTodayCalls(callType) {
-  const col = callType === 'CC' ? 'CC Scheduled' : 'DC Scheduled';
-  const now = new Date();
-  const startOfToday = new Date(now); startOfToday.setHours(0, 0, 0, 0);
-  const endOfToday   = new Date(now); endOfToday.setHours(23, 59, 59, 999);
-
-  return participants
-    .filter(p => !p.isRefunded)
-    .map(p => {
-      const sd = p.sheetData || {};
-      const ts = sd[col];
-      if (!ts) return null;
-      const callDate = new Date(ts);
-      if (isNaN(callDate.getTime())) return null;
-      if (callDate < startOfToday || callDate > endOfToday) return null;
-      return { p, callTime: callDate, callType };
-    })
-    .filter(Boolean)
-    .sort((a, b) => a.callTime.getTime() - b.callTime.getTime());
-}
-
-// Returns true if a scheduled call has happened (past) and the participant's
-// stage has NOT been updated to reflect the outcome.
-// Grace period: 2 hours after the call time before flagging.
-function isCallUnprocessed(p, callType) {
-  const sd = p.sheetData || {};
-  const scheduledCol = callType === 'CC' ? 'CC Scheduled' : 'DC Scheduled';
-  const scheduledTs = sd[scheduledCol];
-  if (!scheduledTs) return false;
-
-  const scheduledTime = new Date(scheduledTs).getTime();
-  if (isNaN(scheduledTime)) return false;
-
-  const now = Date.now();
-  // Call hasn't happened yet (or grace period not reached)
-  if (now - scheduledTime < 2 * 3600000) return false;
-
-  // Stage advance events that count as "processed"
-  const advanceCols = callType === 'CC'
-    ? ['CC Cancelled', 'CC No Show', 'DC Scheduled', 'DC Cancelled', 'DC No Show', "Didn't Purchase", 'Purchase 101', 'Purchase GC']
-    : ['DC Cancelled', 'DC No Show', "Didn't Purchase", 'Purchase 101', 'Purchase GC'];
-
-  for (const col of advanceCols) {
-    if (sd[col]) {
-      const eventTs = new Date(sd[col]).getTime();
-      if (!isNaN(eventTs) && eventTs > scheduledTime) return false;  // stage has advanced
-    }
-  }
-
-  return true;
-}
-
-// Count of participants with unprocessed calls (for Accountability flag count)
-function getUnprocessedCallsCount() {
-  let count = 0;
-  participants.forEach(p => {
-    if (p.isRefunded) return;
-    if (isCallUnprocessed(p, 'CC')) count++;
-    if (isCallUnprocessed(p, 'DC')) count++;
-  });
-  return count;
-}
-
-// Total count of calls today (for tab badge)
-function getTodayCallsCount() {
-  return getTodayCalls('CC').length + getTodayCalls('DC').length;
-}
+// ── (removed) Today / unprocessed-call helpers ──
+// Removed in Jun 2026 rollback: tied to `CC Scheduled` / `DC Scheduled`
+// timestamps, which record booking-event time (not the actual call time).
+// Will be re-added once we integrate GHL Calendar API (Fase 3).
 
 function getFirstName(p) {
   if (p.sheetData && p.sheetData['First Name']) return p.sheetData['First Name'];
@@ -1623,7 +1465,6 @@ function renderStats() {
 // ── Filters ───────────────────────────────────────────────
 function renderFilters() {
   // Update tab counts
-  document.getElementById('today-count').textContent          = getTodayCallsCount();
   document.getElementById('queue-count').textContent          = getActionQueue().length;
   document.getElementById('onboarding-count').textContent     = getOnboardingCount();
   document.getElementById('accountability-count').textContent = getAccountabilityCount();
@@ -2110,96 +1951,6 @@ function obSection(key, title, count, desc, bodyHtml) {
   `;
 }
 
-// ── Today view ────────────────────────────────────────────
-function renderToday() {
-  document.getElementById('state-loading').style.display = 'none';
-  document.getElementById('state-error').style.display   = 'none';
-  document.getElementById('state-empty').style.display   = 'none';
-  document.getElementById('data-table').style.display    = 'none';
-  document.getElementById('today-wrap').style.display    = 'block';
-
-  const ccCalls = getTodayCalls('CC');
-  const dcCalls = getTodayCalls('DC');
-
-  // Today's date label
-  const today = new Date();
-  const dateLabel = today.toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric'
-  });
-
-  const renderCallList = (calls) => calls.map(({ p, callTime, callType }) => renderTodayCard(p, callTime, callType)).join('');
-
-  const ccBody = ccCalls.length === 0
-    ? `<div class="today-empty">No Clarity Calls today.</div>`
-    : `<div class="today-list">${renderCallList(ccCalls)}</div>`;
-
-  const dcBody = dcCalls.length === 0
-    ? `<div class="today-empty">No Discovery Calls today.</div>`
-    : `<div class="today-list">${renderCallList(dcCalls)}</div>`;
-
-  document.getElementById('today-wrap').innerHTML = `
-    <div class="today-header">${esc(dateLabel)}</div>
-
-    <div class="today-section">
-      <div class="today-section-header">
-        <span class="today-section-title">Clarity Calls today</span>
-        <span class="today-section-count">${ccCalls.length}</span>
-      </div>
-      <div class="today-section-desc">Click any participant to open their modal and mark stage / add notes after the call.</div>
-      ${ccBody}
-    </div>
-
-    <div class="today-section">
-      <div class="today-section-header">
-        <span class="today-section-title">Discovery Calls today</span>
-        <span class="today-section-count">${dcCalls.length}</span>
-      </div>
-      <div class="today-section-desc">Click any participant to open their modal and mark stage / add notes after the call.</div>
-      ${dcBody}
-    </div>
-  `;
-}
-
-function renderTodayCard(p, callTime, callType) {
-  const ini = initials(p.name);
-  const clr = nameColor(p.name);
-  const timeLabel = callTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-
-  const now = Date.now();
-  const callMs = callTime.getTime();
-  const isPast = now - callMs > 2 * 3600000;
-  const isUpcoming = callMs > now;
-
-  const unprocessed = isCallUnprocessed(p, callType);
-
-  let statusBadge, cardClass = '';
-  if (isUpcoming) {
-    statusBadge = `<span class="today-card-status upcoming">Upcoming</span>`;
-    cardClass = 'in-future';
-  } else if (unprocessed) {
-    statusBadge = `<span class="today-card-status pending">⚠ Needs update</span>`;
-    cardClass = 'unprocessed';
-  } else if (isPast) {
-    statusBadge = `<span class="today-card-status processed">✓ Processed</span>`;
-  } else {
-    statusBadge = `<span class="today-card-status pending">In progress</span>`;
-  }
-
-  return `
-    <div class="today-card ${cardClass}" onclick="openModal('${esc(p.email)}')">
-      <div class="avatar" style="background:${clr}">${ini}</div>
-      <div class="today-card-info">
-        <div class="today-card-name">${esc(p.name)}</div>
-        <div class="today-card-meta">
-          <span>${esc(p.email || '')}</span>
-          ${statusBadge}
-        </div>
-      </div>
-      <div class="today-card-time">${esc(timeLabel)}</div>
-    </div>
-  `;
-}
-
 function renderOnboarding() {
   document.getElementById('state-loading').style.display = 'none';
   document.getElementById('state-error').style.display   = 'none';
@@ -2398,7 +2149,7 @@ function renderAccountability() {
         <span class="acc-section-title">Dennis — open follow-ups</span>
         <span class="acc-section-count${dennis.length === 0 ? ' zero' : ''}">${dennis.length}</span>
       </div>
-      <div class="acc-section-desc">Reschedule cadence stale 48h+, or scheduled calls where the outcome wasn't logged after the call.</div>
+      <div class="acc-section-desc">Reschedule cadence stale 48h+ (DM, Call #1, Call #2, Offer Doc).</div>
       ${dennis.length === 0
         ? `<div class="acc-empty">✓ Dennis is on top of everything.</div>`
         : `<div class="acc-list">${dennis.map(renderAccCard).join('')}</div>`}
