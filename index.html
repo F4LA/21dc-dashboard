@@ -399,7 +399,8 @@
     .today-card.needs-update { border-left: 3px solid #ef4444; }
     .today-card.in-future { opacity: 0.75; }
     .today-card.in-progress { border-left: 3px solid var(--accent); }
-    .today-card.unmatched { background: #fef9c3; border-color: #fde68a; }
+    .today-card.unmatched { background: #f9fafb; border-color: #e5e7eb; cursor: default; opacity: 0.85; }
+    .today-card.unmatched:hover { border-color: #e5e7eb; background: #f9fafb; }
     .today-card-info { min-width: 0; }
     .today-card-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
     .today-card-meta {
@@ -418,6 +419,7 @@
     .today-card-status.processed { background: #d1fae5; color: #065f46; }
     .today-card-status.upcoming { background: #dbeafe; color: #1e40af; }
     .today-card-status.live { background: #ede9fe; color: #5b21b6; }
+    .today-card-status.external { background: #e5e7eb; color: #4b5563; }
     .today-empty {
       text-align: center; padding: 40px 20px; color: var(--text-muted);
       background: var(--surface); border-radius: 8px; border: 1px dashed var(--border);
@@ -2230,17 +2232,20 @@ function renderTodayEventCard(ev) {
   const email = (ev.email || '').toLowerCase().trim();
   const matched = email ? participants.find(p => (p.email || '').toLowerCase() === email) : null;
 
-  // Status
+  // Status — for external (unmatched) contacts we never show "Needs update"
+  // since Dennis can't update a participant that isn't in this challenge.
   let cardClass = '', statusBadge = '';
-  if (now < startMs) {
+  if (!matched) {
+    // External: visible for schedule awareness, no action expected in this dashboard
+    statusBadge = `<span class="today-card-status external">External call</span>`;
+  } else if (now < startMs) {
     cardClass = 'in-future';
     statusBadge = `<span class="today-card-status upcoming">Upcoming</span>`;
   } else if (now >= startMs && now <= endMs) {
     cardClass = 'in-progress';
     statusBadge = `<span class="today-card-status live">● Live now</span>`;
   } else {
-    // Past — check if stage was updated after event end
-    const stageAdvanced = matched && hasStageAdvancedAfter(matched, ev.callType, endMs);
+    const stageAdvanced = hasStageAdvancedAfter(matched, ev.callType, endMs);
     if (stageAdvanced) {
       statusBadge = `<span class="today-card-status processed">✓ Processed</span>`;
     } else {
@@ -2264,7 +2269,7 @@ function renderTodayEventCard(ev) {
 
   const subtitle = matched
     ? `<span>${esc(matched.email || '')}</span>`
-    : `<span style="color:#92400e">⚠ Not in this challenge — ${esc(email || ev.contactName || 'unknown contact')}</span>`;
+    : `<span style="color:var(--text-muted)">${esc(email || ev.contactName || 'unknown contact')} · not in this challenge</span>`;
 
   return `
     <div class="today-card ${cardClass}" ${clickAction}>
