@@ -2246,12 +2246,16 @@ function renderTodaySetupRequired(wrap, calendars) {
 function renderTodayContent(wrap, events) {
   const cc = events.filter(e => e.callType === 'CC');
   const dc = events.filter(e => e.callType === 'DC');
+  const fu = events.filter(e => e.callType === 'FU');
   const dateLabel = new Date().toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'});
 
   const renderList = (list) => list.length === 0
     ? `<div class="today-empty">No calls scheduled.</div>`
     : `<div class="today-list">${list.map(renderTodayEventCard).join('')}</div>`;
 
+  // FU section only shown if FU calendar is configured (i.e., we got FU events
+  // or the section is at least relevant). For now we always render it so
+  // Dennis knows where his FUs live.
   wrap.innerHTML = `
     <div class="today-header">${esc(dateLabel)}</div>
 
@@ -2271,6 +2275,15 @@ function renderTodayContent(wrap, events) {
       </div>
       <div class="today-section-desc">Real call times from GHL Calendar. Click any card to open the participant.</div>
       ${renderList(dc)}
+    </div>
+
+    <div class="today-section">
+      <div class="today-section-header">
+        <span class="today-section-title">Follow-Up Calls today</span>
+        <span class="today-section-count">${fu.length}</span>
+      </div>
+      <div class="today-section-desc">Second/third conversations after the initial DC. Outcome buttons live in the participant modal.</div>
+      ${renderList(fu)}
     </div>
   `;
 }
@@ -2371,7 +2384,9 @@ function openExternalUpdatePanel(email, name, callType, eventId) {
   }
   __extPanelOpen = hostId;
 
-  // Pick the relevant outcome buttons based on call type
+  // Pick the relevant outcome buttons based on call type.
+  // FU (Follow-Up) shares outcomes with DC since both end in the same
+  // terminal decision (Purchase 101, Purchase GC, Didn't Purchase).
   const ccBtns = `
     <button class="ext-panel-btn danger" onclick="recordExternal('${esc(email)}','CC Cancelled','${esc(hostId)}',this)">CC Cancelled</button>
     <button class="ext-panel-btn danger" onclick="recordExternal('${esc(email)}','CC No Show','${esc(hostId)}',this)">CC No Show</button>
