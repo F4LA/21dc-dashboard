@@ -399,8 +399,60 @@
     .today-card.needs-update { border-left: 3px solid #ef4444; }
     .today-card.in-future { opacity: 0.75; }
     .today-card.in-progress { border-left: 3px solid var(--accent); }
-    .today-card.unmatched { background: #f9fafb; border-color: #e5e7eb; cursor: default; opacity: 0.85; }
-    .today-card.unmatched:hover { border-color: #e5e7eb; background: #f9fafb; }
+    .today-card.unmatched { background: #f9fafb; border-color: #e5e7eb; }
+    .today-card.unmatched:hover { border-color: var(--accent); background: var(--bg); }
+
+    /* External-call update panel (writes outcomes to Historical) */
+    .ext-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid #f59e0b;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin: 6px 0 14px 0;
+      font-size: 13px;
+    }
+    .ext-panel-title {
+      font-size: 12px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.3px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+    .ext-panel-info {
+      color: var(--text-primary); font-size: 13px; margin-bottom: 12px;
+    }
+    .ext-panel-info strong { color: var(--accent); }
+    .ext-panel-loading {
+      color: var(--text-muted); font-size: 12px; padding: 6px 0;
+    }
+    .ext-panel-actions {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 6px;
+    }
+    .ext-panel-btn {
+      padding: 8px 10px;
+      font-size: 12px; font-weight: 600;
+      border-radius: 5px; cursor: pointer; border: 1px solid;
+      transition: all 0.15s;
+    }
+    .ext-panel-btn.danger { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+    .ext-panel-btn.danger:hover { background: #fecaca; }
+    .ext-panel-btn.success { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
+    .ext-panel-btn.success:hover { background: #a7f3d0; }
+    .ext-panel-btn.neutral { background: #f3f4f6; color: #374151; border-color: #d1d5db; }
+    .ext-panel-btn.neutral:hover { background: #e5e7eb; }
+    .ext-panel-btn:disabled { opacity: 0.4; cursor: wait; }
+    .ext-panel-status {
+      margin-top: 10px; padding: 8px 10px;
+      border-radius: 5px; font-size: 12px;
+    }
+    .ext-panel-status.success { background: #d1fae5; color: #065f46; }
+    .ext-panel-status.error { background: #fee2e2; color: #991b1b; }
+    .ext-panel-cancel {
+      background: none; border: none; color: var(--text-muted);
+      font-size: 11px; cursor: pointer; padding: 4px 0; margin-top: 8px;
+    }
+    .ext-panel-cancel:hover { color: var(--text-primary); text-decoration: underline; }
     .today-card-info { min-width: 0; }
     .today-card-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
     .today-card-meta {
@@ -2232,11 +2284,14 @@ function renderTodayEventCard(ev) {
   const email = (ev.email || '').toLowerCase().trim();
   const matched = email ? participants.find(p => (p.email || '').toLowerCase() === email) : null;
 
-  // Status — for external (unmatched) contacts we never show "Needs update"
-  // since Dennis can't update a participant that isn't in this challenge.
+  // Status. External (non-21DC) contacts can still be updated — the system
+  // looks them up in Historical and writes to that past challenge's row.
   let cardClass = '', statusBadge = '';
-  if (!matched) {
-    // External: visible for schedule awareness, no action expected in this dashboard
+  if (!matched && now > endMs) {
+    // External call that already ended — Dennis may still want to log outcome
+    // against the past challenge. Status badge prompts him.
+    statusBadge = `<span class="today-card-status pending">⚠ Update past challenge</span>`;
+  } else if (!matched) {
     statusBadge = `<span class="today-card-status external">External call</span>`;
   } else if (now < startMs) {
     cardClass = 'in-future';
@@ -2265,25 +2320,139 @@ function renderTodayEventCard(ev) {
 
   const clickAction = matched
     ? `onclick="openModal('${esc(matched.email)}')"`
-    : ``;
+    : `onclick="openExternalUpdatePanel('${esc(email)}', '${esc(name)}', '${esc(ev.callType)}', '${esc(ev.eventId || '')}')"`;
 
   const subtitle = matched
     ? `<span>${esc(matched.email || '')}</span>`
     : `<span style="color:var(--text-muted)">${esc(email || ev.contactName || 'unknown contact')} · not in this challenge</span>`;
 
+  const externalPanelHost = !matched ? `<div class="external-panel-host" id="ext-panel-${esc(ev.eventId || email)}"></div>` : '';
+
   return `
-    <div class="today-card ${cardClass}" ${clickAction}>
-      <div class="avatar" style="background:${clr}">${ini}</div>
-      <div class="today-card-info">
-        <div class="today-card-name">${esc(name)}</div>
-        <div class="today-card-meta">
-          ${subtitle}
-          ${statusBadge}
+    <div>
+      <div class="today-card ${cardClass}" ${clickAction}>
+        <div class="avatar" style="background:${clr}">${ini}</div>
+        <div class="today-card-info">
+          <div class="today-card-name">${esc(name)}</div>
+          <div class="today-card-meta">
+            ${subtitle}
+            ${statusBadge}
+          </div>
         </div>
+        <div class="today-card-time">${esc(timeLabel)}</div>
       </div>
-      <div class="today-card-time">${esc(timeLabel)}</div>
+      ${externalPanelHost}
     </div>
   `;
+}
+
+// ── External update panel ─────────────────────────────────
+// For Today events whose contact isn't in the active challenge, opens an
+// inline panel that lets Dennis log the call outcome against the contact's
+// past challenge row in Historical.
+let __extPanelOpen = null;  // currently open panel id, for toggle behavior
+
+function openExternalUpdatePanel(email, name, callType, eventId) {
+  const hostId = 'ext-panel-' + (eventId || email);
+  const host = document.getElementById(hostId);
+  if (!host) return;
+
+  // Toggle: clicking the same card again closes
+  if (__extPanelOpen === hostId) {
+    host.innerHTML = '';
+    __extPanelOpen = null;
+    return;
+  }
+
+  // Close any other open panel
+  if (__extPanelOpen) {
+    const prev = document.getElementById(__extPanelOpen);
+    if (prev) prev.innerHTML = '';
+  }
+  __extPanelOpen = hostId;
+
+  // Pick the relevant outcome buttons based on call type
+  const ccBtns = `
+    <button class="ext-panel-btn danger" onclick="recordExternal('${esc(email)}','CC Cancelled','${esc(hostId)}',this)">CC Cancelled</button>
+    <button class="ext-panel-btn danger" onclick="recordExternal('${esc(email)}','CC No Show','${esc(hostId)}',this)">CC No Show</button>
+  `;
+  const dcBtns = `
+    <button class="ext-panel-btn danger" onclick="recordExternal('${esc(email)}','DC Cancelled','${esc(hostId)}',this)">DC Cancelled</button>
+    <button class="ext-panel-btn danger" onclick="recordExternal('${esc(email)}','DC No Show','${esc(hostId)}',this)">DC No Show</button>
+    <button class="ext-panel-btn neutral" onclick="recordExternal('${esc(email)}',&quot;Didn&apos;t Purchase&quot;,'${esc(hostId)}',this)">Didn't Purchase</button>
+    <button class="ext-panel-btn success" onclick="recordExternal('${esc(email)}','Purchase 101','${esc(hostId)}',this)">Purchase 101</button>
+    <button class="ext-panel-btn success" onclick="recordExternal('${esc(email)}','Purchase GC','${esc(hostId)}',this)">Purchase GC</button>
+  `;
+  const actionBtns = callType === 'CC' ? ccBtns : dcBtns;
+
+  host.innerHTML = `
+    <div class="ext-panel">
+      <div class="ext-panel-title">Update past challenge — ${esc(callType)}</div>
+      <div class="ext-panel-info" id="${esc(hostId)}-info">
+        <span class="ext-panel-loading">⏳ Looking up <strong>${esc(name)}</strong> in Historical…</span>
+      </div>
+      <div class="ext-panel-actions">${actionBtns}</div>
+      <div id="${esc(hostId)}-status"></div>
+      <button class="ext-panel-cancel" onclick="closeExternalPanel('${esc(hostId)}')">Cancel</button>
+    </div>
+  `;
+
+  // Fetch which challenge this person is from, in the background
+  lookupHistoricalChallenge(email, hostId);
+}
+
+function closeExternalPanel(hostId) {
+  const host = document.getElementById(hostId);
+  if (host) host.innerHTML = '';
+  if (__extPanelOpen === hostId) __extPanelOpen = null;
+}
+
+async function lookupHistoricalChallenge(email, hostId) {
+  const infoEl = document.getElementById(hostId + '-info');
+  if (!infoEl) return;
+  try {
+    const res = await fetch(SCRIPT_URL + '?action=findHistorical&email=' + encodeURIComponent(email));
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Lookup failed');
+    if (!json.data.found) {
+      infoEl.innerHTML = `<span style="color:#92400e">⚠ Contact not found in Historical sheet. Update them directly in GHL.</span>`;
+      return;
+    }
+    const challenge = json.data.challenge;
+    infoEl.innerHTML = `From challenge <strong>${esc(challenge)}</strong> — outcome will be recorded against that row.`;
+  } catch(err) {
+    infoEl.innerHTML = `<span style="color:#991b1b">❌ ${esc(err.message)}</span>`;
+  }
+}
+
+async function recordExternal(email, column, hostId, btn) {
+  const statusEl = document.getElementById(hostId + '-status');
+  const allBtns = document.querySelectorAll('#' + CSS.escape(hostId) + ' .ext-panel-btn');
+  allBtns.forEach(b => b.disabled = true);
+  btn.textContent = '⏳ Saving…';
+  statusEl.innerHTML = '';
+
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'recordHistoricalEvent',
+        email: email,
+        column: column,
+        timestamp: new Date().toISOString()
+      })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Save failed');
+
+    statusEl.innerHTML = `<div class="ext-panel-status success">✓ Recorded as <strong>${esc(column)}</strong> in challenge ${esc(json.data.challenge)}</div>`;
+    setTimeout(() => closeExternalPanel(hostId), 1800);
+
+  } catch(err) {
+    statusEl.innerHTML = `<div class="ext-panel-status error">❌ ${esc(err.message)}</div>`;
+    allBtns.forEach(b => b.disabled = false);
+    btn.textContent = column;
+  }
 }
 
 // Returns true if the participant's stage advanced AFTER the event end time
