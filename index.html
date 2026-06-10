@@ -1065,6 +1065,12 @@
       <!-- Reschedule (Fase 3) — visible when stage is Cancelled/No Show -->
       <div id="reschedule-section"></div>
 
+      <!-- Book Follow-Up — visible when stage is DC Scheduled and FU calendar configured -->
+      <div id="followup-section"></div>
+
+      <!-- Mark Inactive (Jackie marks unresponsive participants after Day 5) -->
+      <div id="inactive-section"></div>
+
       <!-- Add note -->
       <div class="section-title">Add note</div>
       <div class="add-note">
@@ -1098,6 +1104,7 @@ const STAGE_STYLE = {
   'DC - Scheduled':    { bg:'#dbeafe', text:'#1e40af', dot:'#3b82f6' },
   'DC - No Show':      { bg:'#fee2e2', text:'#991b1b', dot:'#ef4444' },
   'DC - Cancelled':    { bg:'#ffedd5', text:'#9a3412', dot:'#f97316' },
+  'FU - Scheduled':    { bg:'#ede9fe', text:'#5b21b6', dot:'#8b5cf6' },
   "Didn't Purchase":   { bg:'#f1f5f9', text:'#475569', dot:'#94a3b8' },
   'Purchase 101':      { bg:'#d1fae5', text:'#065f46', dot:'#10b981' },
   'Purchase GC':       { bg:'#d1fae5', text:'#065f46', dot:'#10b981' },
@@ -1111,9 +1118,11 @@ const FILTERS = [
   { id:'cc_issue',    label:'CC Issues',     stages:['CC - No Show','CC - Cancelled'] },
   { id:'dc_ok',       label:'DC Scheduled',  stages:['DC - Scheduled'] },
   { id:'dc_issue',    label:'DC Issues',     stages:['DC - No Show','DC - Cancelled'] },
+  { id:'fu_ok',       label:'FU Scheduled',  stages:['FU - Scheduled'] },
   { id:'no_buy',      label:'No Purchase',   stages:["Didn't Purchase"] },
   { id:'bought',      label:'Purchases',     stages:['Purchase 101','Purchase GC'] },
   { id:'refunded',    label:'Refunded',      stages: null, refundedOnly: true },
+  { id:'inactive',    label:'Inactive',      stages: null, inactiveOnly: true },
 ];
 
 // ── State ─────────────────────────────────────────────────
@@ -1245,7 +1254,7 @@ function challengeDayLabel() {
 // ── Onboarding filters ────────────────────────────────────
 function getOnboardingNoEverfit() {
   return participants.filter(p => {
-    if (p.isRefunded) return false;
+    if (p.isRefunded || p.isInactive) return false;
     const sd = p.sheetData || {};
     const purchased = sd['Date Purchased'] || p.createdAt;
     if (!purchased) return false;
@@ -1272,7 +1281,7 @@ function getCCBookingFlow() {
   if (day === null || day < 2) return [];  // No outreach before Day 2
 
   return participants
-    .filter(p => p.stageName === 'Participant' && !p.isRefunded)
+    .filter(p => p.stageName === 'Participant' && !p.isRefunded && !p.isInactive)
     .map(p => {
       const sd = p.sheetData || {};
       let action = null;
@@ -1301,7 +1310,7 @@ function getCCBookingFlow() {
 // Welcome Message queue: logged into Everfit, no Welcome sent yet
 function getWelcomeQueue() {
   return participants.filter(p => {
-    if (p.isRefunded) return false;
+    if (p.isRefunded || p.isInactive) return false;
     const sd = p.sheetData || {};
     if (!isValidLoginDate(sd['Login to Everfit'])) return false;
     if (sd['Welcome Message Sent']) return false;
@@ -1317,7 +1326,7 @@ function getWelcomeQueue() {
 // List stays visible until BOTH are marked.
 function getSetupTasksQueue() {
   return participants.filter(p => {
-    if (p.isRefunded) return false;
+    if (p.isRefunded || p.isInactive) return false;
     const sd = p.sheetData || {};
     if (!isValidLoginDate(sd['Login to Everfit'])) return false;
     const trainingDone = !!sd['Training Assigned'];
@@ -1362,7 +1371,7 @@ const ACTION_TO_TEMPLATE = {
 function getDennisFlags() {
   const flags = [];
   participants.forEach(p => {
-    if (p.isRefunded) return;
+    if (p.isRefunded || p.isInactive) return;
     const sd    = p.sheetData || {};
     const hrs   = (p.stageAgeMs || 0) / 3600000;
     const stage = p.stageName;
@@ -1406,7 +1415,7 @@ function getJackieFlags() {
   const day = currentChallengeDay();
 
   participants.forEach(p => {
-    if (p.isRefunded) return;
+    if (p.isRefunded || p.isInactive) return;
     const sd = p.sheetData || {};
     const purchased = sd['Date Purchased'] || p.createdAt;
     if (!purchased) return;
@@ -1519,7 +1528,7 @@ function suggestedAction(p) {
 
 function getActionQueue() {
   return participants
-    .filter(p => !p.isRefunded)
+    .filter(p => !p.isRefunded && !p.isInactive)
     .map(p => ({ p, action: suggestedAction(p) }))
     .filter(x => x.action !== null)
     .sort((a, b) => b.p.stageAgeMs - a.p.stageAgeMs);
@@ -1556,6 +1565,10 @@ async function loadData() {
     } else {
       window.__challengeCosts = { adCost: 0, affiliateCost: 0, otherCosts: 0, otherNotes: '' };
     }
+
+    // Flag whether the Follow-Up calendar is configured server-side.
+    // Frontend uses this to decide whether to show the "Book Follow-Up" button.
+    window.__fuConfigured = !!(configJson.success && configJson.data.fuConfigured);
 
     participants = json.data.map(enrich);
     renderStats();
@@ -1609,6 +1622,7 @@ function enrich(p) {
   p.everfitLogin      = isValidLoginDate(p.sheetData && p.sheetData['Login to Everfit']);
   p.kickoffRegistrado = isValidLoginDate(p.sheetData && p.sheetData['Register Kickoff']);
   p.isRefunded        = !!(p.sheetData && p.sheetData['Refunded']);
+  p.isInactive        = !!(p.sheetData && p.sheetData['Marked Inactive']);
   return p;
 }
 
@@ -1682,9 +1696,10 @@ function renderFilters() {
 
   document.getElementById('filter-bar').innerHTML = FILTERS.map(f => {
     let count;
-    if (f.refundedOnly) count = participants.filter(p => p.isRefunded).length;
-    else if (f.stages)  count = participants.filter(p => f.stages.includes(p.stageName) && !p.isRefunded).length;
-    else                count = participants.length;
+    if (f.refundedOnly)      count = participants.filter(p => p.isRefunded).length;
+    else if (f.inactiveOnly) count = participants.filter(p => p.isInactive && !p.isRefunded).length;
+    else if (f.stages)       count = participants.filter(p => f.stages.includes(p.stageName) && !p.isRefunded && !p.isInactive).length;
+    else                     count = participants.length;
     if (count === 0 && f.id !== 'all') return '';
     return `<button class="filter-chip${activeFilter===f.id?' active':''}"
       onclick="setFilter('${f.id}')">${f.label}<span class="filter-count">${count}</span></button>`;
@@ -1731,10 +1746,12 @@ function getFiltered() {
   let list;
   if (f && f.refundedOnly) {
     list = participants.filter(p => p.isRefunded);
+  } else if (f && f.inactiveOnly) {
+    list = participants.filter(p => p.isInactive && !p.isRefunded);
   } else if (f && f.stages) {
-    list = participants.filter(p => f.stages.includes(p.stageName) && !p.isRefunded);
+    list = participants.filter(p => f.stages.includes(p.stageName) && !p.isRefunded && !p.isInactive);
   } else {
-    // 'all' filter still includes refunded so they're visible somewhere by default
+    // 'all' filter still includes refunded + inactive so they're visible somewhere by default
     list = [...participants];
   }
 
@@ -1785,7 +1802,10 @@ function renderTrackerTable() {
     const refundBadge = p.isRefunded
       ? `<span class="stage-badge" style="background:#fee2e2;color:#991b1b;margin-left:6px"><span class="stage-dot" style="background:#ef4444"></span>Refunded</span>`
       : '';
-    const rowOpacity = p.isRefunded ? 'opacity:0.6' : '';
+    const inactiveBadge = (!p.isRefunded && p.isInactive)
+      ? `<span class="stage-badge" style="background:#f3f4f6;color:#4b5563;margin-left:6px"><span class="stage-dot" style="background:#9ca3af"></span>Inactive</span>`
+      : '';
+    const rowOpacity = (p.isRefunded || p.isInactive) ? 'opacity:0.6' : '';
 
     return `<tr onclick="openModal('${p.email}')" style="${rowOpacity}">
       <td><div class="avatar" style="background:${clr}">${ini}</div></td>
@@ -1799,6 +1819,7 @@ function renderTrackerTable() {
           ${esc(p.stageName)}
         </span>
         ${refundBadge}
+        ${inactiveBadge}
       </td>
       <td><span class="time-cell ${timeClass}">${fmtDuration(p.stageAgeMs)}</span></td>
       <td class="hide-sm">
@@ -2471,12 +2492,19 @@ async function recordExternal(email, column, hostId, btn) {
 }
 
 // Returns true if the participant's stage advanced AFTER the event end time
-// (i.e., Dennis logged the outcome). callType = 'CC' | 'DC'
+// (i.e., Dennis logged the outcome). callType = 'CC' | 'DC' | 'FU'
 function hasStageAdvancedAfter(p, callType, eventEndMs) {
   const sd = p.sheetData || {};
-  const advanceCols = callType === 'CC'
-    ? ['CC Cancelled', 'CC No Show', 'DC Scheduled', 'DC Cancelled', 'DC No Show', "Didn't Purchase", 'Purchase 101', 'Purchase GC']
-    : ['DC Cancelled', 'DC No Show', "Didn't Purchase", 'Purchase 101', 'Purchase GC'];
+  let advanceCols;
+  if (callType === 'CC') {
+    advanceCols = ['CC Cancelled', 'CC No Show', 'DC Scheduled', 'DC Cancelled', 'DC No Show', 'FU Scheduled', "Didn't Purchase", 'Purchase 101', 'Purchase GC'];
+  } else if (callType === 'DC') {
+    // After a DC, valid advance signals include: stage outcome OR booking a Follow-Up
+    advanceCols = ['DC Cancelled', 'DC No Show', 'FU Scheduled', "Didn't Purchase", 'Purchase 101', 'Purchase GC'];
+  } else {
+    // FU — only terminal outcomes count as advance
+    advanceCols = ["Didn't Purchase", 'Purchase 101', 'Purchase GC'];
+  }
   for (const col of advanceCols) {
     if (sd[col]) {
       const ts = new Date(sd[col]).getTime();
@@ -2780,7 +2808,7 @@ function computeFunnel() {
   const paidSources = ['meta ads', 'ads', 'manychat ads'];
   let paidParticipants = 0;
   participants.forEach(p => {
-    if (p.isRefunded) return;
+    if (p.isRefunded || p.isInactive) return;
     const src = (p.source || '').toLowerCase().trim();
     if (paidSources.includes(src)) paidParticipants++;
   });
@@ -3120,6 +3148,8 @@ async function openModal(emailOrId) {
   renderRefundSection(p);
   renderOutreachSection(p);
   renderRescheduleSection(p);
+  renderFollowUpSection(p);
+  renderInactiveSection(p);
 
   document.getElementById('note-input').value = '';
   document.getElementById('note-saved').style.display = 'none';
@@ -3557,6 +3587,274 @@ async function confirmReschedule() {
     `;
     btn.disabled = false;
     btn.textContent = 'Retry booking';
+  }
+}
+
+// ── Book Follow-Up UI ─────────────────────────────────────
+// Shows a "Book Follow-Up" section when the participant's stage is
+// DC - Scheduled (DC has been booked, no terminal outcome yet) AND
+// FU_CALENDAR_ID is configured server-side. Same slot-picker UX as
+// Reschedule, but books to the FU calendar and writes the timestamp
+// to the participant's "FU Scheduled" sheet column.
+let __fuState = { open: false, date: null, slot: null };
+
+function renderFollowUpSection(p) {
+  const wrap = document.getElementById('followup-section');
+  if (!wrap) return;
+  __fuState = { open: false, date: null, slot: null };
+
+  const stage = p.stageName || '';
+  // FU only makes sense AFTER a DC has been scheduled (not for cancelled/no-show)
+  // and before any terminal outcome
+  if (stage !== 'DC - Scheduled' || p.isRefunded || p.isInactive) {
+    wrap.innerHTML = '';
+    return;
+  }
+  // FU calendar must be configured server-side
+  if (!window.__fuConfigured) {
+    wrap.innerHTML = '';
+    return;
+  }
+
+  wrap.innerHTML = `
+    <div class="resched-section">
+      <div class="resched-title" style="color:#5b21b6">Book Follow-Up</div>
+      <button class="resched-btn" style="background:#ede9fe;color:#5b21b6;border-color:#c4b5fd" onclick="toggleFollowUp()">📅 Book Follow-Up Call</button>
+      <div id="fu-panel-wrap"></div>
+    </div>
+  `;
+}
+
+function toggleFollowUp() {
+  __fuState.open = !__fuState.open;
+  if (__fuState.open) {
+    openFollowUpPanel();
+  } else {
+    document.getElementById('fu-panel-wrap').innerHTML = '';
+  }
+}
+
+function openFollowUpPanel() {
+  const wrap = document.getElementById('fu-panel-wrap');
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  const defaultDate = tomorrow.toISOString().slice(0,10);
+  __fuState.date = defaultDate;
+
+  wrap.innerHTML = `
+    <div class="resched-panel">
+      <label>Date</label>
+      <input type="date" id="fu-date" value="${defaultDate}"
+        min="${new Date().toISOString().slice(0,10)}"
+        onchange="onFuDateChange(this.value)">
+      <label>Available slots (Follow-Up calendar)</label>
+      <div id="fu-slots">
+        <div style="font-size:12px;color:var(--text-muted);padding:10px 0">
+          <div class="spinner" style="display:inline-block;width:12px;height:12px;vertical-align:middle;margin-right:6px"></div>
+          Loading slots…
+        </div>
+      </div>
+      <button class="resched-confirm" id="fu-confirm-btn" disabled onclick="confirmFollowUp()" style="background:#7c3aed">
+        Pick a slot to continue
+      </button>
+      <div id="fu-status"></div>
+    </div>
+  `;
+  loadFuSlots(defaultDate);
+}
+
+function onFuDateChange(date) {
+  __fuState.date = date;
+  __fuState.slot = null;
+  document.getElementById('fu-confirm-btn').disabled = true;
+  document.getElementById('fu-confirm-btn').textContent = 'Pick a slot to continue';
+  loadFuSlots(date);
+}
+
+async function loadFuSlots(date) {
+  const slotsEl = document.getElementById('fu-slots');
+  slotsEl.innerHTML = `
+    <div style="font-size:12px;color:var(--text-muted);padding:10px 0">
+      <div class="spinner" style="display:inline-block;width:12px;height:12px;vertical-align:middle;margin-right:6px"></div>
+      Loading slots…
+    </div>
+  `;
+  try {
+    const url = SCRIPT_URL + '?action=getFreeSlots&callType=FU&date=' + encodeURIComponent(date);
+    const res = await fetch(url);
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Failed to load slots');
+    const slots = json.data.slots || [];
+    if (slots.length === 0) {
+      slotsEl.innerHTML = `<div style="font-size:12px;color:var(--text-muted);padding:10px 0">No available slots on this date. Try another day.</div>`;
+      return;
+    }
+    slotsEl.innerHTML = `
+      <div class="resched-slot-grid">
+        ${slots.map(s => {
+          const t = new Date(s).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+          return `<div class="resched-slot" data-iso="${esc(s)}" onclick="selectFuSlot('${esc(s)}')">${esc(t)}</div>`;
+        }).join('')}
+      </div>
+    `;
+  } catch(err) {
+    slotsEl.innerHTML = `<div style="font-size:12px;color:#991b1b;padding:10px 0">❌ ${esc(err.message)}</div>`;
+  }
+}
+
+function selectFuSlot(iso) {
+  __fuState.slot = iso;
+  document.querySelectorAll('#fu-panel-wrap .resched-slot').forEach(el => {
+    el.classList.toggle('selected', el.dataset.iso === iso);
+  });
+  const btn = document.getElementById('fu-confirm-btn');
+  const t = new Date(iso).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+  btn.disabled = false;
+  btn.textContent = 'Book ' + new Date(iso).toLocaleDateString('en-US', {month:'short', day:'numeric'}) + ' at ' + t;
+}
+
+async function confirmFollowUp() {
+  if (!__fuState.slot || !activeContact) return;
+  const btn = document.getElementById('fu-confirm-btn');
+  const statusEl = document.getElementById('fu-status');
+  btn.disabled = true;
+  btn.textContent = '⏳ Booking…';
+  statusEl.innerHTML = '';
+
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'bookAppointment',
+        callType: 'FU',
+        email: activeContact.email,
+        firstName: (activeContact.name || '').split(' ')[0] || '',
+        lastName: (activeContact.name || '').split(' ').slice(1).join(' ') || '',
+        startTime: __fuState.slot
+      })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Booking failed');
+
+    statusEl.innerHTML = `
+      <div class="resched-status success">
+        ✓ Follow-Up booked. Stage updated to FU - Scheduled.
+      </div>
+    `;
+    btn.textContent = '✓ Booked';
+    setTimeout(() => { closeModal(); loadData(); }, 1500);
+
+  } catch(err) {
+    statusEl.innerHTML = `<div class="resched-status error">❌ ${esc(err.message)}</div>`;
+    btn.disabled = false;
+    btn.textContent = 'Retry booking';
+  }
+}
+
+// ── Mark Inactive UI ──────────────────────────────────────
+// Jackie reviews participants on Day 5 of challenge. If a participant
+// hasn't logged into Everfit, OR has logged in but never filled the
+// intake form (so Training/Calories couldn't be assigned), they're
+// marked inactive. Inactive participants are excluded from all queues,
+// accountability flags, and source breakdowns. Still visible in Tracker
+// under the "Inactive" filter chip.
+function renderInactiveSection(p) {
+  const wrap = document.getElementById('inactive-section');
+  if (!wrap) return;
+
+  if (p.isRefunded) {
+    wrap.innerHTML = '';
+    return;
+  }
+
+  if (p.isInactive) {
+    var markedAt = (p.sheetData && p.sheetData['Marked Inactive']) || '';
+    var dateLabel = '';
+    try { dateLabel = new Date(markedAt).toLocaleDateString('en-US', {month:'short', day:'numeric'}); } catch(_) {}
+    wrap.innerHTML = `
+      <div class="section-title" style="margin-top:18px;color:#4b5563">Inactive</div>
+      <div style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:8px;padding:12px 14px;font-size:13px;color:#374151;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <span>○ Marked inactive${dateLabel ? ' on <strong>' + esc(dateLabel) + '</strong>' : ''}</span>
+        <button class="btn btn-ghost btn-sm" onclick="clearInactive()" style="border-color:#d1d5db;color:#374151">Undo</button>
+      </div>
+    `;
+  } else {
+    wrap.innerHTML = `
+      <div class="section-title" style="margin-top:18px">Mark Inactive</div>
+      <button class="action-btn" onclick="markInactive()" style="width:100%;background:#f3f4f6;color:#4b5563;border-color:#d1d5db">○ Mark Inactive</button>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.4">
+        Use after Day 5 if the participant hasn't logged into Everfit, or logged in but never filled the intake form.
+      </div>
+    `;
+  }
+}
+
+async function markInactive() {
+  if (!activeContact) return;
+  const target = activeContact;
+  if (!confirm(`Mark "${target.name}" as Inactive? They'll be hidden from outreach queues and accountability flags.`)) return;
+  const nowIso = new Date().toISOString();
+
+  // Optimistic update
+  if (!target.sheetData) target.sheetData = {};
+  target.sheetData['Marked Inactive'] = nowIso;
+  target.isInactive = true;
+  renderInactiveSection(target);
+  renderStats(); renderFilters();
+  if (activeView === 'tracker') renderTable();
+  else if (activeView === 'onboarding') renderOnboarding();
+  else if (activeView === 'accountability') renderAccountability();
+
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'recordEvent',
+        email: target.email,
+        column: 'Marked Inactive',
+        timestamp: nowIso
+      })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Failed');
+  } catch(err) {
+    // Revert
+    target.sheetData['Marked Inactive'] = '';
+    target.isInactive = false;
+    renderInactiveSection(target);
+    renderStats(); renderFilters();
+    alert('Failed to mark inactive: ' + err.message);
+  }
+}
+
+async function clearInactive() {
+  if (!activeContact) return;
+  const target = activeContact;
+  const prev = target.sheetData && target.sheetData['Marked Inactive'];
+
+  // Optimistic
+  if (target.sheetData) target.sheetData['Marked Inactive'] = '';
+  target.isInactive = false;
+  renderInactiveSection(target);
+  renderStats(); renderFilters();
+  if (activeView === 'tracker') renderTable();
+
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'clearEvent',
+        email: target.email,
+        column: 'Marked Inactive'
+      })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Failed');
+  } catch(err) {
+    if (target.sheetData) target.sheetData['Marked Inactive'] = prev;
+    target.isInactive = true;
+    renderInactiveSection(target);
+    renderStats(); renderFilters();
+    alert('Failed to undo: ' + err.message);
   }
 }
 
