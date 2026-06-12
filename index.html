@@ -1050,6 +1050,7 @@
         <button class="action-btn action-btn-danger" onclick="markEvent('CC No Show')">CC No Show</button>
         <button class="action-btn action-btn-danger" onclick="markEvent('DC Cancelled')">DC Cancelled</button>
         <button class="action-btn action-btn-danger" onclick="markEvent('DC No Show')">DC No Show</button>
+        <button class="action-btn" onclick="markEvent(&quot;Didn't Book DC&quot;)" style="grid-column: span 2">Didn't Book DC</button>
         <button class="action-btn" onclick="markEvent(&quot;Didn't Purchase&quot;)" style="grid-column: span 2">Didn't Purchase</button>
         <button class="action-btn action-btn-success" onclick="markEvent('Purchase 101')">Purchase 101</button>
         <button class="action-btn action-btn-success" onclick="markEvent('Purchase GC')">Purchase GC</button>
@@ -1105,6 +1106,7 @@ const STAGE_STYLE = {
   'DC - No Show':      { bg:'#fee2e2', text:'#991b1b', dot:'#ef4444' },
   'DC - Cancelled':    { bg:'#ffedd5', text:'#9a3412', dot:'#f97316' },
   'FU - Scheduled':    { bg:'#ede9fe', text:'#5b21b6', dot:'#8b5cf6' },
+  "Didn't Book DC":    { bg:'#f1f5f9', text:'#475569', dot:'#94a3b8' },
   "Didn't Purchase":   { bg:'#f1f5f9', text:'#475569', dot:'#94a3b8' },
   'Purchase 101':      { bg:'#d1fae5', text:'#065f46', dot:'#10b981' },
   'Purchase GC':       { bg:'#d1fae5', text:'#065f46', dot:'#10b981' },
@@ -2497,7 +2499,7 @@ function hasStageAdvancedAfter(p, callType, eventEndMs) {
   const sd = p.sheetData || {};
   let advanceCols;
   if (callType === 'CC') {
-    advanceCols = ['CC Cancelled', 'CC No Show', 'DC Scheduled', 'DC Cancelled', 'DC No Show', 'FU Scheduled', "Didn't Purchase", 'Purchase 101', 'Purchase GC'];
+    advanceCols = ['CC Cancelled', 'CC No Show', 'DC Scheduled', 'DC Cancelled', 'DC No Show', 'FU Scheduled', "Didn't Book DC", "Didn't Purchase", 'Purchase 101', 'Purchase GC'];
   } else if (callType === 'DC') {
     // After a DC, valid advance signals include: stage outcome OR booking a Follow-Up
     advanceCols = ['DC Cancelled', 'DC No Show', 'FU Scheduled', "Didn't Purchase", 'Purchase 101', 'Purchase GC'];
@@ -2756,6 +2758,7 @@ function computeFunnel() {
   const sourceCount = {};   // { source: count }
 
   const attendedCCStages = ['DC - Scheduled', 'DC - Cancelled', 'DC - No Show',
+                            'FU - Scheduled', "Didn't Book DC",
                             "Didn't Purchase", 'Purchase 101', 'Purchase GC'];
   const attendedDCStages = ["Didn't Purchase", 'Purchase 101', 'Purchase GC'];
 
