@@ -1961,21 +1961,25 @@ async function renderHistory() {
 
   const rows = sorted.map((c, idx) => {
     const rowKey = `hist-${idx}`;
+    // Show booked + attended for both CC and DC — both numbers were in the
+    // backend response all along but the table previously only displayed attended.
     return `<tr class="hist-row" data-row-key="${rowKey}" onclick="toggleHistRow('${rowKey}')">
       <td>
         <span class="hist-chevron">▶</span>
-        <span class="hist-challenge">${esc(c.challenge)}</span>
+        <span class="hist-challenge">${esc(prettyChallengeName(c.challenge))}</span>
       </td>
       <td>${c.total}</td>
-      <td>${c.attendedCC}<span class="hist-pct">${pct(c.attendedCC, c.total)}</span></td>
-      <td>${c.attendedDC}<span class="hist-pct">${pct(c.attendedDC, c.total)}</span></td>
-      <td>${c.purchased}<span class="hist-pct">${pct(c.purchased, c.total)}</span></td>
+      <td>${c.bookedCC || 0}<span class="hist-pct">${pct(c.bookedCC || 0, c.total)}</span></td>
+      <td>${c.attendedCC}<span class="hist-pct">${pct(c.attendedCC, c.bookedCC || c.total)}</span></td>
+      <td>${c.bookedDC || 0}<span class="hist-pct">${pct(c.bookedDC || 0, c.attendedCC || c.total)}</span></td>
+      <td>${c.attendedDC}<span class="hist-pct">${pct(c.attendedDC, c.bookedDC || c.total)}</span></td>
+      <td>${c.purchased}<span class="hist-pct">${pct(c.purchased, c.attendedDC || c.total)}</span></td>
       <td>${c.purchase101 || 0}</td>
       <td>${c.purchaseGC || 0}</td>
       <td class="hist-revenue">${fmtMoney(c.totalRev || 0)}</td>
     </tr>
     <tr class="hist-detail-row hidden" data-detail-key="${rowKey}">
-      <td colspan="8">${renderChallengeDetail(c)}</td>
+      <td colspan="10">${renderChallengeDetail(c)}</td>
     </tr>`;
   }).join('');
 
@@ -1985,7 +1989,9 @@ async function renderHistory() {
         <tr>
           <th>Challenge</th>
           <th>Enrolled</th>
+          <th>Booked CC</th>
           <th>Attended CC</th>
+          <th>Booked DC</th>
           <th>Attended DC</th>
           <th>Purchased</th>
           <th>1-on-1</th>
@@ -1996,6 +2002,23 @@ async function renderHistory() {
       <tbody>${rows}</tbody>
     </table>
   `;
+}
+
+// Normalize challenge name for display. Old archived rows had Date objects
+// stored in the Challenge column (e.g., "Sun Mar 01 2026 00:00:00 GMT-0500
+// (hora de Ecuador)"); newer rows use clean "YYYY-MM" strings. Render
+// everything as YYYY-MM for readability.
+function prettyChallengeName(raw) {
+  if (!raw) return '(no name)';
+  var s = String(raw).trim();
+  // Already in YYYY-MM format
+  if (/^\d{4}-\d{2}$/.test(s)) return s;
+  // Try parsing as a Date
+  var d = new Date(s);
+  if (!isNaN(d.getTime()) && d.getFullYear() > 2000) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  }
+  return s;
 }
 
 function toggleHistRow(rowKey) {
@@ -2085,11 +2108,15 @@ function renderChallengeDetail(c) {
   return `
     <div class="hist-detail-inner">
       <div class="hist-detail-card">
-        <div class="hist-detail-card-title">Funnel — ${esc(c.challenge)}</div>
+        <div class="hist-detail-card-title">Funnel — ${esc(prettyChallengeName(c.challenge))}</div>
         ${funnelStep('Total enrolled', total)}
-        ${connector(total, c.attendedCC || 0)}
+        ${connector(total, c.bookedCC || 0)}
+        ${funnelStep('Booked CC', c.bookedCC || 0)}
+        ${connector(c.bookedCC || 0, c.attendedCC || 0)}
         ${funnelStep('Attended CC', c.attendedCC || 0)}
-        ${connector(c.attendedCC || 0, c.attendedDC || 0)}
+        ${connector(c.attendedCC || 0, c.bookedDC || 0)}
+        ${funnelStep('Booked DC', c.bookedDC || 0)}
+        ${connector(c.bookedDC || 0, c.attendedDC || 0)}
         ${funnelStep('Attended DC', c.attendedDC || 0)}
         ${connector(c.attendedDC || 0, c.purchased || 0)}
         ${funnelStep('Purchased', c.purchased || 0)}
