@@ -1056,6 +1056,10 @@
         <button class="action-btn action-btn-success" onclick="markEvent('Purchase GC')">Purchase GC</button>
       </div>
 
+      <!-- Manual booking override — visible when Zapier didn't auto-detect a CC/DC booking
+           (e.g., participant booked with a different email than the one in Participants sheet) -->
+      <div id="manual-booking-section"></div>
+
       <!-- Refund section (always visible) -->
       <div id="refund-section"></div>
 
@@ -3190,6 +3194,7 @@ async function openModal(emailOrId) {
   document.getElementById('m-history').innerHTML   = formatHistory(p.previousChallenges);
 
   // Render refund + contextual outreach buttons
+  renderManualBookingSection(p);
   renderRefundSection(p);
   renderOutreachSection(p);
   renderRescheduleSection(p);
@@ -3435,6 +3440,78 @@ function renderOutreachSection(p) {
 }
 
 // Refund section in modal. Always rendered (regardless of stage).
+// ── Manual booking override ──────────────────────────────
+// When a participant tells us they booked a CC/DC but the dashboard
+// didn't auto-detect it (usually because they booked under a different
+// email — common when they have multiple GHL contact profiles), this
+// section lets Dennis/Bernardo manually mark the booking. Visible only
+// in stages where the next expected booking hasn't fired automatically.
+function renderManualBookingSection(p) {
+  const wrap = document.getElementById('manual-booking-section');
+  if (!wrap) return;
+  if (p.isRefunded || p.isInactive) { wrap.innerHTML = ''; return; }
+
+  const stage = p.stageName || '';
+  let button = '';
+
+  if (stage === 'Participant') {
+    button = `<button class="action-btn" style="background:#dbeafe;color:#1e40af;border-color:#93c5fd;width:100%"
+                onclick="manualMarkBooking('CC Scheduled')">📅 Mark CC Scheduled</button>`;
+  } else if (stage === 'CC - Scheduled' || stage === "Didn't Book DC") {
+    button = `<button class="action-btn" style="background:#dbeafe;color:#1e40af;border-color:#93c5fd;width:100%"
+                onclick="manualMarkBooking('DC Scheduled')">📅 Mark DC Scheduled</button>`;
+  }
+
+  if (!button) { wrap.innerHTML = ''; return; }
+
+  wrap.innerHTML = `
+    <div class="section-title" style="margin-top:18px">Manual booking override</div>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;line-height:1.4">
+      Use only if the auto-detection missed a booking (e.g., they booked with a different email).
+    </div>
+    ${button}
+  `;
+}
+
+async function manualMarkBooking(column) {
+  if (!activeContact) return;
+  const target = activeContact;
+  if (!confirm(`Manually mark "${column}" for ${target.name}? This bypasses the auto-detection — only use if you've verified the booking actually happened.`)) return;
+
+  const nowIso = new Date().toISOString();
+  if (!target.sheetData) target.sheetData = {};
+  target.sheetData[column] = nowIso;
+
+  // Optimistic UI refresh
+  if (column === 'CC Scheduled' && target.stageName === 'Participant') target.stageName = 'CC - Scheduled';
+  else if (column === 'DC Scheduled' && (target.stageName === 'CC - Scheduled' || target.stageName === "Didn't Book DC")) target.stageName = 'DC - Scheduled';
+
+  renderManualBookingSection(target);
+  renderStats(); renderFilters();
+  if (activeView === 'tracker') renderTable();
+  else if (activeView === 'onboarding') renderOnboarding();
+
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'recordEvent',
+        email: target.email,
+        column: column,
+        timestamp: nowIso,
+        firstName: (target.name || '').split(' ')[0] || '',
+        lastName: (target.name || '').split(' ').slice(1).join(' ') || ''
+      })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Failed');
+    closeModal();
+    setTimeout(() => loadData(), 300);
+  } catch(err) {
+    alert('Failed to mark booking: ' + err.message);
+  }
+}
+
 function renderRefundSection(p) {
   const wrap = document.getElementById('refund-section');
   const sd = p.sheetData || {};
