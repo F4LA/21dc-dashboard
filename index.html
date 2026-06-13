@@ -1959,10 +1959,25 @@ async function renderHistory() {
 
   const pct = (n, d) => d ? Math.round((n / d) * 100) + '%' : '—';
 
+  // Auto-detect challenges where attendance data is incomplete (legacy
+  // archives without CC/DC outcome tracking). When true, render "—" for
+  // the affected attended-* cells rather than misleading low numbers.
+  const isIncompleteCC = (c) =>
+    ((c.ccCancelled || 0) + (c.ccNoShow || 0) === 0) &&
+    (c.bookedCC || 0) > (c.attendedCC || 0);
+  const isIncompleteDC = (c) =>
+    ((c.dcCancelled || 0) + (c.dcNoShow || 0) === 0) &&
+    ((c.didntPurchase || 0) + (c.purchase101 || 0) + (c.purchaseGC || 0) + (c.fuScheduled || 0)) < (c.bookedDC || 0);
+  const cell = (val, pctLabel) => val !== '—'
+    ? `${val}<span class="hist-pct">${pctLabel}</span>`
+    : `<span style="color:var(--text-muted)">—</span>`;
+
   const rows = sorted.map((c, idx) => {
     const rowKey = `hist-${idx}`;
-    // Show booked + attended for both CC and DC — both numbers were in the
-    // backend response all along but the table previously only displayed attended.
+    const incCC = isIncompleteCC(c);
+    const incDC = isIncompleteDC(c);
+    const attendedCCDisplay = incCC ? '—' : c.attendedCC;
+    const attendedDCDisplay = incDC ? '—' : c.attendedDC;
     return `<tr class="hist-row" data-row-key="${rowKey}" onclick="toggleHistRow('${rowKey}')">
       <td>
         <span class="hist-chevron">▶</span>
@@ -1970,9 +1985,9 @@ async function renderHistory() {
       </td>
       <td>${c.total}</td>
       <td>${c.bookedCC || 0}<span class="hist-pct">${pct(c.bookedCC || 0, c.total)}</span></td>
-      <td>${c.attendedCC}<span class="hist-pct">${pct(c.attendedCC, c.bookedCC || c.total)}</span></td>
+      <td>${cell(attendedCCDisplay, pct(c.attendedCC, c.bookedCC || c.total))}</td>
       <td>${c.bookedDC || 0}<span class="hist-pct">${pct(c.bookedDC || 0, c.attendedCC || c.total)}</span></td>
-      <td>${c.attendedDC}<span class="hist-pct">${pct(c.attendedDC, c.bookedDC || c.total)}</span></td>
+      <td>${cell(attendedDCDisplay, pct(c.attendedDC, c.bookedDC || c.total))}</td>
       <td>${c.purchased}<span class="hist-pct">${pct(c.purchased, c.attendedDC || c.total)}</span></td>
       <td>${c.purchase101 || 0}</td>
       <td>${c.purchaseGC || 0}</td>
