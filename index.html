@@ -2320,7 +2320,13 @@ function renderTodayContent(wrap, events) {
     const ts = new Date(e.startTime).getTime();
     return ts >= startMs && ts <= endMs;
   });
-  const cc = events.filter(e => e.callType === 'CC');
+  const cc = events.filter(e => {
+    if (e.callType !== 'CC') return false;
+    const email = (e.email || '').toLowerCase().trim();
+    if (!email) return true;
+    const p = participants.find(x => (x.email || '').toLowerCase() === email);
+    return !(p && p.isRefunded);
+  });
   const dc = events.filter(e => e.callType === 'DC');
   const fu = events.filter(e => e.callType === 'FU');
   const dateLabel = new Date().toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'});
