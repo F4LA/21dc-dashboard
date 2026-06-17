@@ -952,6 +952,7 @@
   <div class="stat-item"><div class="stat-value" id="s-cc">—</div><div class="stat-label">CC Scheduled</div></div>
   <div class="stat-item"><div class="stat-value" id="s-dc">—</div><div class="stat-label">DC Scheduled</div></div>
   <div class="stat-item"><div class="stat-value" id="s-purchase">—</div><div class="stat-label">Purchases</div></div>
+  <div class="stat-item"><div class="stat-value" id="s-conv">—</div><div class="stat-label">CC → DC Conv.</div></div>
 </div>
 
 <!-- ── Main ─────────────────────────────────────────────── -->
@@ -1679,6 +1680,14 @@ function renderStats() {
   document.getElementById('s-cc').textContent           = active.filter(p=>p.stageName==='CC - Scheduled').length;
   document.getElementById('s-dc').textContent           = active.filter(p=>p.stageName==='DC - Scheduled').length;
   document.getElementById('s-purchase').textContent     = active.filter(p=>p.stageName.startsWith('Purchase')).length;
+
+  const bookedStages = ['DC - Scheduled','DC - No Show','DC - Cancelled','FU - Scheduled',"Didn't Purchase",'Purchase 101','Purchase GC'];
+  const booked    = active.filter(p => bookedStages.includes(p.stageName)).length;
+  const didntBook = active.filter(p => p.stageName === "Didn't Book DC").length;
+  const ccAttended = booked + didntBook;
+  document.getElementById('s-conv').innerHTML = ccAttended === 0
+    ? '—'
+    : `${Math.round(booked/ccAttended*100)}% <span style="font-size:11px;color:var(--text-muted);font-weight:400">(${booked}/${ccAttended})</span>`;
 }
 
 // ── Filters ───────────────────────────────────────────────
