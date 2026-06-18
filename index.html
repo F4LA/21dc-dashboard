@@ -625,8 +625,68 @@
       .aq-card-status, .aq-card-action, .aq-card-note-wrap { align-items: flex-start; }
     }
 
-    /* ── Onboarding view ─────────────────────────────────── */
-    .onboarding-wrap { padding: 0; }
+    /* ── Intake Form cards (inside Actions Today) ──────────── */
+    /* Three buckets visualized inline: Ready (green), Review (amber),
+       Pending (gray/amber/red depending on hours since login). */
+    .intake-group { margin-bottom: 18px; }
+    .intake-group:last-child { margin-bottom: 0; }
+    .intake-group-header {
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 12px;
+      margin-bottom: 8px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .intake-group-header.ready   { background: #dcfce7; color: #166534; }
+    .intake-group-header.review  { background: #fef3c7; color: #92400e; }
+    .intake-group-header.pending { background: #f3f4f6; color: #4b5563; }
+    .intake-group-sub { font-weight: 400; font-size: 12px; opacity: 0.85; }
+    .intake-card {
+      display: grid;
+      grid-template-columns: minmax(180px, 1fr) minmax(220px, 1.4fr) auto;
+      gap: 16px;
+      align-items: center;
+      padding: 14px 18px;
+      background: var(--surface, #fff);
+      border: 1px solid var(--border, #e5e7eb);
+      border-radius: 10px;
+      margin-bottom: 8px;
+    }
+    .intake-card.ready  { border-left: 4px solid #22c55e; }
+    .intake-card.review { border-left: 4px solid #f59e0b; }
+    .intake-card.pending { border-left: 4px solid #9ca3af; }
+    .intake-card-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .intake-card-meta { min-width: 0; flex: 1; }
+    .intake-card-name { font-size: 14px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .intake-card-email { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .intake-card-macros { display: flex; flex-direction: column; gap: 3px; }
+    .intake-card-macros.muted { opacity: 0.6; }
+    .intake-macro-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+    .intake-macro-label { color: var(--text-muted); font-weight: 500; }
+    .intake-macro-value { color: var(--text-primary); font-weight: 600; }
+    .intake-card-flag {
+      font-size: 12px;
+      padding: 6px 10px;
+      background: #fef3c7;
+      color: #92400e;
+      border-radius: 6px;
+      grid-column: 2 / 3;
+      align-self: start;
+    }
+    .intake-card-actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+    .intake-pending-status { font-size: 13px; padding: 8px 12px; border-radius: 6px; }
+    .intake-pending-status.soft  { background: #f3f4f6; color: #4b5563; }
+    .intake-pending-status.amber { background: #fef3c7; color: #92400e; }
+    .intake-pending-status.red   { background: #fee2e2; color: #991b1b; }
+    @media (max-width: 800px) {
+      .intake-card { grid-template-columns: 1fr; gap: 10px; }
+      .intake-card-flag { grid-column: 1; }
+    }
+
+    /* ── Action Queue cards (inside Actions Today) ─────────── */
     .ob-section {
       margin-bottom: 28px;
       background: var(--surface, #fff);
@@ -1422,7 +1482,9 @@ function getCCBookingFlow() {
       if (!sd['Day 2 DM Sent']) {
         action = { type: 'day_2_dm',         label: 'Send Day 2 DM',         dayDue: 2,  hasCopy: true };
       } else if (!sd['Day 4 Call #1']) {
-        action = { type: 'day_4_call',       label: 'Day 4 Call',            dayDue: 4,  hasCopy: false };
+        // Day 4 Call is run by Bernardo. Copy button gives the no-answer template
+        // for when the participant doesn't pick up — Bernardo sends it via Everfit.
+        action = { type: 'day_4_call',       label: 'Day 4 Call',            dayDue: 4,  hasCopy: true };
       } else if (!sd['Day 6 Offer Doc Sent']) {
         action = { type: 'day_19_offer_doc', label: 'Send Day 19 Offer Doc', dayDue: 19, hasCopy: true };
       }
@@ -1470,6 +1532,43 @@ function getSetupTasksQueue() {
   });
 }
 
+// Intake Form classification helpers.
+// All three categories require: logged in to Everfit, not refunded/inactive,
+// and not yet fully set up in Everfit (Training + Calories both done).
+// The Macro Engine status ("READY TO ASSIGN" / "BERNARDO REVIEW") decides
+// which bucket; absence of intake form submission lands them in "Pending".
+function isParticipantInIntakeFlow(p) {
+  if (p.isRefunded || p.isInactive) return false;
+  const sd = p.sheetData || {};
+  if (!isValidLoginDate(sd['Login to Everfit'])) return false;
+  if (sd['Training Assigned'] && sd['Calories Assigned']) return false;
+  return true;
+}
+function getIntakeReady() {
+  return participants.filter(p => {
+    if (!isParticipantInIntakeFlow(p)) return false;
+    const d = (window.__intakeMacroByEmail || {})[(p.email || '').toLowerCase()];
+    if (!d || !d.macro || !d.macro.found) return false;
+    return String(d.macro.status || '').toUpperCase().indexOf('READY') >= 0;
+  });
+}
+function getIntakeReview() {
+  return participants.filter(p => {
+    if (!isParticipantInIntakeFlow(p)) return false;
+    const d = (window.__intakeMacroByEmail || {})[(p.email || '').toLowerCase()];
+    if (!d || !d.macro || !d.macro.found) return false;
+    return String(d.macro.status || '').toUpperCase().indexOf('REVIEW') >= 0;
+  });
+}
+function getIntakePending() {
+  return participants.filter(p => {
+    if (!isParticipantInIntakeFlow(p)) return false;
+    const d = (window.__intakeMacroByEmail || {})[(p.email || '').toLowerCase()];
+    // No data fetched yet OR intake form not submitted
+    return !d || !d.intake || !d.intake.found;
+  });
+}
+
 function getOnboardingCount() {
   return getOnboardingNoEverfit().length
        + getWelcomeQueue().length
@@ -1493,6 +1592,7 @@ const ACTION_TO_COLUMN = {
 // Map action type → message template key (if it has a copyable message)
 const ACTION_TO_TEMPLATE = {
   day_2_dm:         'day_2_dm',
+  day_4_call:       'day_4_no_answer',   // Bernardo sends if the call didn't connect
   day_19_offer_doc: 'day_19_offer_doc',
   welcome_message:  'welcome_message'
 };
@@ -1714,11 +1814,34 @@ async function loadData() {
 
     // Notes are now lazy-loaded on modal open (sheet-based participants
     // don't have a contactId until we look it up by email).
+
+    // Kick off intake + macro fetch in the background. The Today view will
+    // re-render its Intake Form section once the cache is populated.
+    loadIntakeMacroInBackground();
   } catch(err) {
     setState('error');
     document.getElementById('error-msg').textContent = err.message;
   } finally {
     btn.disabled = false;
+  }
+}
+
+async function loadIntakeMacroInBackground() {
+  try {
+    const res = await fetch(SCRIPT_URL + '?action=getIntakeMacro');
+    const json = await res.json();
+    if (!json.success) {
+      console.warn('Intake/Macro fetch returned error:', json.error);
+      window.__intakeMacroByEmail = {};
+      if (activeView === 'today') renderOnboarding();
+      return;
+    }
+    window.__intakeMacroByEmail = json.data || {};
+    if (activeView === 'today') renderOnboarding();
+  } catch(err) {
+    console.warn('Intake/Macro background load failed:', err);
+    window.__intakeMacroByEmail = {};
+    if (activeView === 'today') renderOnboarding();
   }
 }
 
@@ -2811,6 +2934,172 @@ function renderActionQueueCard({ p, action }) {
   `;
 }
 
+// ── Intake Form section (reads from Macro Engine spreadsheet) ──────────
+// Three buckets:
+//   - Ready to Assign (READY TO ASSIGN status): macros pre-filled, Gabi copies into Everfit
+//   - Need Review (BERNARDO REVIEW status): Bernardo decides, with flag explanation
+//   - Pending: intake form not submitted yet, surface reminder cadence
+function renderIntakeFormSection() {
+  const cacheLoaded = !!window.__intakeMacroByEmail;
+  const ready = cacheLoaded ? getIntakeReady() : [];
+  const review = cacheLoaded ? getIntakeReview() : [];
+  const pending = cacheLoaded ? getIntakePending() : [];
+  const total = ready.length + review.length + pending.length;
+
+  let body;
+  if (!cacheLoaded) {
+    body = `<div class="ob-empty">⏳ Loading intake & macros from Macro Engine…</div>`;
+  } else if (total === 0) {
+    body = `<div class="ob-empty">✨ Nothing pending — everyone's intake & macros are sorted.</div>`;
+  } else {
+    body = `
+      ${ready.length > 0 ? `
+        <div class="intake-group">
+          <div class="intake-group-header ready">🟢 Ready to Assign · ${ready.length}</div>
+          ${ready.map(renderIntakeReadyCard).join('')}
+        </div>` : ''}
+      ${review.length > 0 ? `
+        <div class="intake-group">
+          <div class="intake-group-header review">🟡 Need Review · ${review.length} <span class="intake-group-sub">(Bernardo decides)</span></div>
+          ${review.map(renderIntakeReviewCard).join('')}
+        </div>` : ''}
+      ${pending.length > 0 ? `
+        <div class="intake-group">
+          <div class="intake-group-header pending">⚪ Intake Pending · ${pending.length}</div>
+          ${pending.map(renderIntakePendingCard).join('')}
+        </div>` : ''}
+    `;
+  }
+  return obSection('intake-form', 'Intake Form', total,
+    `Intake form submissions + macros from the Macro Engine. Copy macros into Everfit, then mark Training/Calories in Setup Tasks.`,
+    body, true /* defaultCollapsed */);
+}
+
+function renderIntakeReadyCard(p) {
+  const d = (window.__intakeMacroByEmail || {})[(p.email || '').toLowerCase()];
+  if (!d || !d.macro) return '';
+  const m = d.macro;
+  const ini = initials(p.name);
+  const clr = nameColor(p.name);
+  return `
+    <div class="intake-card ready">
+      <div class="intake-card-head">
+        <div class="avatar" style="background:${clr}">${ini}</div>
+        <div class="intake-card-meta">
+          <div class="intake-card-name">${esc(p.name)}</div>
+          <div class="intake-card-email">${esc(p.email || '')}</div>
+        </div>
+      </div>
+      <div class="intake-card-macros">
+        <div class="intake-macro-row"><span class="intake-macro-label">Calories</span><span class="intake-macro-value">${esc(String(m.calories))}</span></div>
+        <div class="intake-macro-row"><span class="intake-macro-label">Protein</span><span class="intake-macro-value">${esc(String(m.protein))} g</span></div>
+        <div class="intake-macro-row"><span class="intake-macro-label">Program</span><span class="intake-macro-value">${esc(String(m.program))}</span></div>
+      </div>
+      <div class="intake-card-actions">
+        <button class="ob-btn ob-btn-primary" onclick="copyMacros('${esc(p.email)}', this)">📋 Copy macros</button>
+        <button class="ob-btn" onclick="openModal('${esc(p.email)}')">Open participant</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderIntakeReviewCard(p) {
+  const d = (window.__intakeMacroByEmail || {})[(p.email || '').toLowerCase()];
+  if (!d || !d.macro) return '';
+  const m = d.macro;
+  const ini = initials(p.name);
+  const clr = nameColor(p.name);
+  return `
+    <div class="intake-card review">
+      <div class="intake-card-head">
+        <div class="avatar" style="background:${clr}">${ini}</div>
+        <div class="intake-card-meta">
+          <div class="intake-card-name">${esc(p.name)}</div>
+          <div class="intake-card-email">${esc(p.email || '')}</div>
+        </div>
+      </div>
+      <div class="intake-card-flag">⚠️ ${esc(m.flag || 'Flagged for review')}</div>
+      <div class="intake-card-macros muted">
+        <div class="intake-macro-row"><span class="intake-macro-label">Calories</span><span class="intake-macro-value">${esc(String(m.calories || '—'))}</span></div>
+        <div class="intake-macro-row"><span class="intake-macro-label">Protein</span><span class="intake-macro-value">${esc(String(m.protein || '—'))} g</span></div>
+        <div class="intake-macro-row"><span class="intake-macro-label">Program</span><span class="intake-macro-value">${esc(String(m.program || '—'))}</span></div>
+      </div>
+      <div class="intake-card-actions">
+        <a class="ob-btn" href="https://docs.google.com/spreadsheets/d/18WvFlZTO18hqKqCKfCUQvz6Nu_CzixIi_dVnHT8iDAA/edit" target="_blank" rel="noopener">View in Macro Engine ↗</a>
+        <button class="ob-btn" onclick="openModal('${esc(p.email)}')">Open participant</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderIntakePendingCard(p) {
+  const sd = p.sheetData || {};
+  const loginVal = sd['Login to Everfit'];
+  const hrs = loginVal ? (Date.now() - new Date(loginVal).getTime()) / 3600000 : 0;
+  let status, statusClass, copyType;
+  if (hrs < 24) {
+    status = `Logged in ${Math.round(hrs)}h ago. Wait until 24h before first reminder.`;
+    statusClass = 'soft';
+    copyType = null;
+  } else if (hrs < 48) {
+    status = `${Math.round(hrs)}h since login. Send Reminder #1.`;
+    statusClass = 'amber';
+    copyType = 'intake_followup_msg1';
+  } else {
+    status = `${Math.round(hrs)}h since login. Send Reminder #2.`;
+    statusClass = 'red';
+    copyType = 'intake_followup_msg2';
+  }
+  const ini = initials(p.name);
+  const clr = nameColor(p.name);
+  return `
+    <div class="intake-card pending">
+      <div class="intake-card-head">
+        <div class="avatar" style="background:${clr}">${ini}</div>
+        <div class="intake-card-meta">
+          <div class="intake-card-name">${esc(p.name)}</div>
+          <div class="intake-card-email">${esc(p.email || '')}</div>
+        </div>
+      </div>
+      <div class="intake-pending-status ${statusClass}">${esc(status)}</div>
+      <div class="intake-card-actions">
+        ${copyType ? `<button class="ob-btn ob-btn-primary" onclick="copyIntakeReminder('${esc(p.email)}', '${copyType}', this)">📋 Copy reminder</button>` : ''}
+        <button class="ob-btn" onclick="openModal('${esc(p.email)}')">Open participant</button>
+      </div>
+    </div>
+  `;
+}
+
+async function copyMacros(email, btn) {
+  const p = participants.find(x => (x.email || '').toLowerCase() === (email || '').toLowerCase());
+  if (!p) return;
+  const d = (window.__intakeMacroByEmail || {})[(email || '').toLowerCase()];
+  if (!d || !d.macro || !d.macro.found) { alert('No macros found for this participant'); return; }
+  const m = d.macro;
+  const text = `${p.name}\nCalories: ${m.calories}\nProtein: ${m.protein} g\nProgram: ${m.program}`;
+  try {
+    await navigator.clipboard.writeText(text);
+    const original = btn.textContent;
+    btn.textContent = '✓ Copied';
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1500);
+  } catch(err) { alert('Could not copy: ' + err.message); }
+}
+
+async function copyIntakeReminder(email, type, btn) {
+  const p = participants.find(x => (x.email || '').toLowerCase() === (email || '').toLowerCase());
+  if (!p) return;
+  const tpl = MESSAGE_TEMPLATES[type];
+  if (!tpl) { alert('No template for ' + type); return; }
+  try {
+    await navigator.clipboard.writeText(tpl(getFirstName(p)));
+    const original = btn.textContent;
+    btn.textContent = '✓ Copied';
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1500);
+  } catch(err) { alert('Could not copy: ' + err.message); }
+}
+
 function renderOnboarding() {
   const noEverfit  = getOnboardingNoEverfit();
   const welcome    = getWelcomeQueue();
@@ -2858,6 +3147,8 @@ function renderOnboarding() {
     ${obSection('welcome_message', 'Welcome Message', welcome.length,
       `Participants who logged into Everfit and haven't received a Welcome Message yet. Send via <strong>Everfit DM</strong>.`,
       welcomeBody, true /* defaultCollapsed */)}
+
+    ${(activeView === 'today') ? renderIntakeFormSection() : ''}
 
     ${obSection('setup_tasks', 'Setup Tasks (Training & Calories)', setup.length,
       `Participants who logged in and still need their training plan and/or calorie targets assigned in Everfit. Check the intake form in Everfit, then assign and mark here. The list stays visible until both are marked — review daily.`,
