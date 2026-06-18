@@ -1168,64 +1168,96 @@ function setView(view) {
 
 // ── Onboarding message templates ──────────────────────────
 // Customize message text here. {firstName} is replaced at runtime.
+// Gabi-sent templates use the Strong Standard team voice (no individual signature).
+// Bernardo-sent templates use his first-person voice (he sends them personally).
 const MESSAGE_TEMPLATES = {
-  // Sent by EMAIL to participants who haven't logged into Everfit
+  // Sent by EMAIL by Gabi to participants who haven't logged into Everfit
   login_reachout: (firstName) =>
 `Hi ${firstName},
 
-Welcome to the 21-Day Challenge! I'm Jackie, one of the coaches here at Strong Standard, and I'm really excited to have you with us.
+Welcome to the 21-Day Challenge! We're really excited to have you with us.
 
-I wanted to quickly reach out because I noticed you haven't connected to Everfit yet.
+We're reaching out because we noticed you haven't connected to Everfit yet.
 
-After signing up, you should have received a separate email from Everfit, which is the app we use for the challenge. That email gives you access to create your account and get fully set up.
+After signing up, you should have received a separate email from Everfit, which is the app we use for the challenge. That email gives you access to create your account and get fully set up. If you don't see it, check your spam or promotions folder.
 
-If you don't see it, no worries, it may have landed in your spam or promotions folder.
+Everfit is where everything happens: onboarding tasks, coaching, updates, resources, and communication with the team.
 
-This part is important because Everfit is where everything for the challenge will happen, your onboarding tasks, coaching, updates, resources, and communication with the team.
+Here's the link if you need it: [PASTE EVERFIT LINK HERE]
 
-You can also use this link to get connected:
-
-[PASTE EVERFIT LINK HERE]
-
-Once you're in, make sure to complete the onboarding tasks so you're ready to go.
-
-If you have any trouble accessing it, just reply to this email and we'll help you out.
+Once you're in, complete the onboarding tasks so you're ready to go. Any trouble accessing it, just reply to this email and we'll help out.
 
 Excited to have you with us!
 
-Jackie`,
+The Strong Standard team`,
 
-  // Sent via Everfit DM on Day 2 to non-bookers
+  // Sent via Everfit DM by Gabi on Day 2 to non-bookers
   day_2_dm: (firstName) =>
-`Hey ${firstName}! I noticed you haven't booked your Clarity Call yet, so I just wanted to reach out personally.
+`Hey ${firstName}! We noticed you haven't booked your Clarity Call yet, so just wanted to reach out.
 
-I really don't want you to miss it because this call can be super helpful, especially if you're trying to figure out what's actually been holding you back and what to focus on during the rest of the challenge.
+We really don't want you to miss it. This call is super helpful for figuring out what's been holding you back and what to focus on for the rest of the challenge.
 
-It's only 20 minutes, and the goal is for you to walk away with more clarity and a better direction moving forward.
+It's only 20 minutes, and the goal is for you to walk away with more clarity and a better direction.
 
 Here's the link to grab a time: https://api.leadconnectorhq.com/widget/bookings/clarity-call-21dc`,
 
-  // Sent via Everfit on Day 6 with Offer Doc to non-responders
-  day_6_offer_doc: (firstName) =>
-`Hey ${firstName}! I tried reaching out a couple of times this week but couldn't connect with you, and that's totally okay.
+  // Sent via Everfit DM by Bernardo immediately after a Day 4 Call where the participant didn't pick up
+  day_4_no_answer: (firstName) =>
+`Hey ${firstName}! This is Bernardo, co-founder and head coach at Strong Standard. I tried calling your cell today but couldn't get through, so I figured I'd reach out here.
 
-I'm sending over a document with some information about what we offer after the challenge, just in case it's useful for you at some point.
+The reason I was calling is because I noticed you haven't booked your Clarity Call yet and I really didn't want you to miss it.
 
-If you ever want to chat, we're here. Hope the rest of the challenge is going well!`,
+It's only 20 minutes, but it can make a real difference in terms of getting clear on what to focus on for the rest of the challenge and what your next step looks like after. Is there a reason you haven't booked it yet? I want to make sure there's nothing getting in the way.
 
-  // Sent via Everfit DM once participant has logged into Everfit
+Here's the link whenever you're ready: https://api.leadconnectorhq.com/widget/bookings/clarity-call-21dc`,
+
+  // Sent via Everfit by Gabi as the final closer (last Friday of the challenge, Day 19)
+  day_19_offer_doc: (firstName) =>
+`Hey ${firstName}! We tried connecting a few times throughout the challenge but couldn't catch you, and that's totally okay.
+
+We're sending over a document with information about what we offer after the challenge, in case it's useful for you down the line.
+
+If you ever want to chat, we're here. Hope the rest of the challenge is going strong!`,
+
+  // Sent via Everfit DM by Gabi once participant has logged into Everfit
   welcome_message: (firstName) =>
-`Hey ${firstName}
-Welcome to the 21-Day Lean & Strong Challenge with Strong Standard Coaching! I'm [Lead Coach Name], your coach, and I'll be here to make sure you have an amazing experience and crush your goals during the Challenge. I'll be supporting you through the community and our weekly group calls, so you're never alone in this journey.
-I'm super excited to get started on [Date]!
-Your Onboarding Tasks are already ready for you, so make sure to complete them as soon as you can. This will help you get familiar with everything you need to know to be successful in the Challenge.
+`Hey ${firstName},
 
-To stay up to date with all the important events, like the Kick-Off Call and our weekly Coaching Calls, make sure to add our calendar using this link:
+Welcome to the 21-Day Lean & Strong Challenge with Strong Standard Coaching! We're the team supporting you over the next three weeks: through the community, our weekly coaching calls, and the one-on-one conversations along the way.
 
-👉https://calendar.google.com/calendar/u/4?cid=Y19iNGY1NDBmYzEyN2ZhZmI1MzE1NjQ0OGU3YTlmMDhiZDVmZmY4ZmJmN2M0MzVkNjJmYTFlMTZlNzVjODM5ZDYwQGdyb3VwLmNhbGVuZGFyLmdvb2dsZS5jb20
+We're super excited to get started.
 
-When you open the link, click "Add" when it asks if you want to add the calendar. Then just make sure it's visible by checking the box next to it. To do that, go to the calendar menu (the three lines at the top left corner).
-Let's get ready to make some awesome progress together!`
+Your Onboarding Tasks are already loaded in Everfit, so complete them as soon as you can to set yourself up for success.
+
+To stay on top of the Kick-Off Call and our weekly Coaching Calls, add our calendar using this link:
+
+👉 https://calendar.google.com/calendar/u/4?cid=Y19iNGY1NDBmYzEyN2ZhZmI1MzE1NjQ0OGU3YTlmMDhiZDVmZmY4ZmJmN2M0MzVkNjJmYTFlMTZlNzVjODM5ZDYwQGdyb3VwLmNhbGVuZGFyLmdvb2dsZS5jb20
+
+Click "Add" when prompted, and make sure it's visible by checking the box next to it.
+
+Let's make this challenge count!
+
+The Strong Standard team`,
+
+  // Sent via Everfit DM by Gabi 24h after Everfit login if intake form not filled yet
+  intake_followup_msg1: (firstName) =>
+`Hey ${firstName}! Quick reminder: we still need you to fill out the intake form so we can set up your training and nutrition correctly.
+
+It takes about 5 minutes and unlocks the personalization for the rest of the challenge: https://docs.google.com/forms/d/e/1FAIpQLSdxkrMnHgpkGz96xVm6DMsI2KJ7ltZ-KmskKeL2hm-Sgs-w_Q/viewform
+
+Let us know if you have any trouble with it.
+
+The Strong Standard team`,
+
+  // Sent via Everfit DM by Gabi 48h after Everfit login if intake form still not filled
+  intake_followup_msg2: (firstName) =>
+`Hey ${firstName}, checking in one more time on the intake form. We can't set up your training and nutrition until we have your answers, and we don't want you to fall behind.
+
+Quick link: https://docs.google.com/forms/d/e/1FAIpQLSdxkrMnHgpkGz96xVm6DMsI2KJ7ltZ-KmskKeL2hm-Sgs-w_Q/viewform
+
+If something's blocking you from filling it out, just reply here and we'll help you out.
+
+The Strong Standard team`
 };
 
 // ── Challenge day helpers ─────────────────────────────────
@@ -1282,8 +1314,10 @@ function getOnboardingNoEverfit() {
   });
 }
 
-// CC Booking flow per Coach SOP §4.1: Day 2 DM → Day 4 Call #1 → Day 5 Call #2 → Day 6 Offer Doc
-// Returns array of { p, action } where action.type ∈ {day_2_dm, day_4_call, day_5_call, day_6_offer_doc}
+// CC Booking flow (new model): Day 2 DM → Day 4 Call → Day 19 Offer Doc
+// Day 5 Call #2 was removed. The Offer Doc moved from Day 6 to Day 19 (last Friday).
+// Sheet columns are unchanged (legacy names preserved) — only the flow logic and UI labels changed.
+// Returns array of { p, action } where action.type ∈ {day_2_dm, day_4_call, day_19_offer_doc}
 function getCCBookingFlow() {
   const day = currentChallengeDay();
   if (day === null || day < 2) return [];  // No outreach before Day 2
@@ -1295,13 +1329,11 @@ function getCCBookingFlow() {
       let action = null;
 
       if (!sd['Day 2 DM Sent']) {
-        action = { type: 'day_2_dm',        label: 'Send Day 2 DM',     dayDue: 2, hasCopy: true };
+        action = { type: 'day_2_dm',         label: 'Send Day 2 DM',         dayDue: 2,  hasCopy: true };
       } else if (!sd['Day 4 Call #1']) {
-        action = { type: 'day_4_call',      label: 'Day 4 Call #1',     dayDue: 4, hasCopy: false };
-      } else if (!sd['Day 5 Call #2']) {
-        action = { type: 'day_5_call',      label: 'Day 5 Call #2',     dayDue: 5, hasCopy: false };
+        action = { type: 'day_4_call',       label: 'Day 4 Call',            dayDue: 4,  hasCopy: false };
       } else if (!sd['Day 6 Offer Doc Sent']) {
-        action = { type: 'day_6_offer_doc', label: 'Send Day 6 Offer Doc', dayDue: 6, hasCopy: true };
+        action = { type: 'day_19_offer_doc', label: 'Send Day 19 Offer Doc', dayDue: 19, hasCopy: true };
       }
       // Hide if not yet at the appropriate day
       if (action && day < action.dayDue) action = null;
@@ -1355,11 +1387,13 @@ function getOnboardingCount() {
 }
 
 // Map action type → sheet column
+// Column names in the sheet are preserved as-is (legacy: "Day 4 Call #1", "Day 6 Offer Doc Sent")
+// even though the UI now labels them "Day 4 Call" and "Day 19 Offer Doc". This keeps historical
+// data intact without requiring a sheet migration.
 const ACTION_TO_COLUMN = {
   day_2_dm:         'Day 2 DM Sent',
   day_4_call:       'Day 4 Call #1',
-  day_5_call:       'Day 5 Call #2',
-  day_6_offer_doc:  'Day 6 Offer Doc Sent',
+  day_19_offer_doc: 'Day 6 Offer Doc Sent',
   welcome_message:  'Welcome Message Sent',
   training:         'Training Assigned',
   calories:         'Calories Assigned'
@@ -1368,7 +1402,7 @@ const ACTION_TO_COLUMN = {
 // Map action type → message template key (if it has a copyable message)
 const ACTION_TO_TEMPLATE = {
   day_2_dm:         'day_2_dm',
-  day_6_offer_doc:  'day_6_offer_doc',
+  day_19_offer_doc: 'day_19_offer_doc',
   welcome_message:  'welcome_message'
 };
 
@@ -1450,10 +1484,9 @@ function getJackieFlags() {
     // 2) CC booking flow flags — only for Participant stage, only after Day 2
     if (p.stageName === 'Participant' && day !== null && day >= 2) {
       const expected = [
-        { col: 'Day 2 DM Sent',         dueDay: 2, next: 'Day 4 Call #1' },
-        { col: 'Day 4 Call #1',         dueDay: 4, next: 'Day 5 Call #2' },
-        { col: 'Day 5 Call #2',         dueDay: 5, next: 'Day 6 Offer Doc' },
-        { col: 'Day 6 Offer Doc Sent',  dueDay: 6, next: null }
+        { col: 'Day 2 DM Sent',         dueDay: 2,  next: 'Day 4 Call' },
+        { col: 'Day 4 Call #1',         dueDay: 4,  next: 'Day 19 Offer Doc' },
+        { col: 'Day 6 Offer Doc Sent',  dueDay: 19, next: null }
       ];
 
       let prevDone = true;
@@ -2639,7 +2672,7 @@ function renderOnboarding() {
       setupBody)}
 
     ${obSection('cc_booking', 'CC Booking Outreach', ccBooking.length,
-      `Per Coach SOP §4.1: Day 2 DM → Day 4 Call #1 → Day 5 Call #2 → Day 6 Offer Doc. Each step shows when its scheduled day arrives.`,
+      `New booking flow: Day 2 DM → Day 4 Call → Day 19 Offer Doc. Each step shows when its scheduled day arrives.`,
       ccBookingBody)}
   `;
 }
@@ -3430,9 +3463,8 @@ function renderOutreachSection(p) {
       buttons.push({ col: 'Calories Assigned',    label: 'Calories Assigned' });
     }
     buttons.push({ col: 'Day 2 DM Sent',        label: 'Day 2 DM' });
-    buttons.push({ col: 'Day 4 Call #1',        label: 'Day 4 Call #1' });
-    buttons.push({ col: 'Day 5 Call #2',        label: 'Day 5 Call #2' });
-    buttons.push({ col: 'Day 6 Offer Doc Sent', label: 'Day 6 Offer Doc' });
+    buttons.push({ col: 'Day 4 Call #1',        label: 'Day 4 Call' });
+    buttons.push({ col: 'Day 6 Offer Doc Sent', label: 'Day 19 Offer Doc' });
   } else if (['CC - Cancelled', 'CC - No Show', 'DC - Cancelled', 'DC - No Show'].includes(stage)) {
     heading = 'Reschedule outreach (Dennis)';
     description = 'Override only — the regular flow lives in the <strong>Action Queue</strong> tab. Use these buttons to log actions taken outside that flow, or to correct missed click-throughs.';
