@@ -4215,17 +4215,38 @@ function stripHtml(s) {
 }
 
 // Compute current stage locally from sheet column timestamps (mirrors Apps Script computeStage_)
+// Within a tier (CC, DC), the most recent timestamp wins — so a reschedule
+// (CC Scheduled written after CC Cancelled) correctly returns to CC - Scheduled.
 function computeStageLocal(sheetData) {
   if (!sheetData) return 'Participant';
-  if (sheetData['Purchase 101'])     return 'Purchase 101';
-  if (sheetData['Purchase GC'])      return 'Purchase GC';
-  if (sheetData["Didn't Purchase"])  return "Didn't Purchase";
-  if (sheetData['DC No Show'])       return 'DC - No Show';
-  if (sheetData['DC Cancelled'])     return 'DC - Cancelled';
-  if (sheetData['DC Scheduled'])     return 'DC - Scheduled';
-  if (sheetData['CC No Show'])       return 'CC - No Show';
-  if (sheetData['CC Cancelled'])     return 'CC - Cancelled';
-  if (sheetData['CC Scheduled'])     return 'CC - Scheduled';
+  const sd = sheetData;
+  if (sd['Purchase 101'])    return 'Purchase 101';
+  if (sd['Purchase GC'])     return 'Purchase GC';
+  if (sd["Didn't Purchase"]) return "Didn't Purchase";
+  const pickLatest = pairs => {
+    let best = 0, stage = null;
+    for (const [col, name] of pairs) {
+      const v = sd[col];
+      if (!v) continue;
+      const t = new Date(v).getTime();
+      if (!isNaN(t) && t > best) { best = t; stage = name; }
+    }
+    return stage;
+  };
+  const dcStage = pickLatest([
+    ['FU Scheduled',    'FU - Scheduled'],
+    ['DC No Show',      'DC - No Show'],
+    ['DC Cancelled',    'DC - Cancelled'],
+    ['DC Scheduled',    'DC - Scheduled'],
+    ["Didn't Book DC",  "Didn't Book DC"],
+  ]);
+  if (dcStage) return dcStage;
+  const ccStage = pickLatest([
+    ['CC No Show',   'CC - No Show'],
+    ['CC Cancelled', 'CC - Cancelled'],
+    ['CC Scheduled', 'CC - Scheduled'],
+  ]);
+  if (ccStage) return ccStage;
   return 'Participant';
 }
 
