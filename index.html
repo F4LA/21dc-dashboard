@@ -1343,6 +1343,11 @@ function setView(view) {
   document.getElementById('analytics-wrap').style.display      = 'none';
   document.getElementById('history-wrap').style.display        = 'none';
 
+  // Clear any owner-filter classes left over from a previous Today render.
+  // applyOwnerFilter() will restore the correct one if we're entering Today.
+  const mainEl = document.querySelector('.main');
+  if (mainEl) mainEl.classList.remove('filter-all', 'filter-gabi', 'filter-bernardo', 'filter-deniz');
+
   if (view === 'today') {
     // Today is the master operational view: Calls + Actions Today (Action
     // Queue + Onboarding sub-sections). renderOnboarding now includes the
@@ -1355,11 +1360,6 @@ function setView(view) {
       applyDayActionsCollapseState();
       applyOwnerFilter();    // re-apply the owner filter after sections render
     })();
-  } else {
-    // Leaving Today — clear the filter-* class from .main so other views
-    // aren't accidentally affected by CSS rules.
-    const main = document.querySelector('.main');
-    if (main) main.classList.remove('filter-all', 'filter-gabi', 'filter-bernardo', 'filter-deniz');
   }
   else if (view === 'accountability') renderAccountability();
   else if (view === 'analytics')      renderAnalytics();
