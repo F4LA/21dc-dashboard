@@ -1835,7 +1835,9 @@ function getFiltered() {
 
 // ── Table ─────────────────────────────────────────────────
 function renderTable() {
-  if (activeView === 'queue') return renderQueueTable();
+  // In 'today' view, the data-table holds the Action Queue, so renderTable must
+  // route to renderQueueTable to avoid clobbering it with Tracker rows.
+  if (activeView === 'queue' || activeView === 'today') return renderQueueTable();
   return renderTrackerTable();
 }
 
