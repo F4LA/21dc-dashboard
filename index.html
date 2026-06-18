@@ -545,6 +545,23 @@
     .resched-status.error { background: #fee2e2; color: #991b1b; }
     .resched-status.info { background: #dbeafe; color: #1e40af; }
 
+    /* ── Day Actions master header (Today view) ──────────── */
+    /* Visual divider between "Calls Today" master section and the operational
+       worklist (Action Queue + Onboarding sections) below it. */
+    .day-actions-master-header {
+      display: flex; align-items: center; gap: 10px;
+      margin: 32px 0 16px 0;
+      padding: 14px 18px;
+      background: linear-gradient(90deg, var(--accent-light, #ede9fe) 0%, transparent 100%);
+      border-left: 4px solid var(--accent, #5b3def);
+      border-radius: 8px;
+    }
+    .day-actions-master-emoji { font-size: 20px; line-height: 1; }
+    .day-actions-master-title {
+      font-size: 17px; font-weight: 700; color: var(--text-primary);
+      letter-spacing: 0.2px;
+    }
+
     /* ── Onboarding view ─────────────────────────────────── */
     .onboarding-wrap { padding: 0; }
     .ob-section {
@@ -2386,42 +2403,33 @@ function renderTodayContent(wrap, events) {
   const dc = events.filter(e => e.callType === 'DC');
   const fu = events.filter(e => e.callType === 'FU');
   const dateLabel = new Date().toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'});
+  const totalCalls = cc.length + dc.length + fu.length;
 
   const renderList = (list) => list.length === 0
     ? `<div class="today-empty">No calls scheduled.</div>`
     : `<div class="today-list">${list.map(renderTodayEventCard).join('')}</div>`;
 
-  // FU section only shown if FU calendar is configured (i.e., we got FU events
-  // or the section is at least relevant). For now we always render it so
-  // Dennis knows where his FUs live.
+  // Nested structure: top-level "Calls Today" master section, with the three
+  // call types as collapsible sub-sections inside it. Uses obSection() for
+  // collapse + localStorage persistence (same machinery as Onboarding).
+  const callsInner = `
+    ${obSection('calls-cc', 'Clarity Calls today', cc.length,
+      'Real call times from GHL Calendar. Click any card to open the participant.',
+      renderList(cc))}
+    ${obSection('calls-dc', 'Discovery Calls today', dc.length,
+      'Real call times from GHL Calendar. Click any card to open the participant.',
+      renderList(dc))}
+    ${obSection('calls-fu', 'Follow-Up Calls today', fu.length,
+      'Second/third conversations after the initial DC. Outcome buttons live in the participant modal.',
+      renderList(fu))}
+  `;
+
   wrap.innerHTML = `
     <div class="today-header">${esc(dateLabel)}</div>
-
-    <div class="today-section">
-      <div class="today-section-header">
-        <span class="today-section-title">Clarity Calls today</span>
-        <span class="today-section-count">${cc.length}</span>
-      </div>
-      <div class="today-section-desc">Real call times from GHL Calendar. Click any card to open the participant.</div>
-      ${renderList(cc)}
-    </div>
-
-    <div class="today-section">
-      <div class="today-section-header">
-        <span class="today-section-title">Discovery Calls today</span>
-        <span class="today-section-count">${dc.length}</span>
-      </div>
-      <div class="today-section-desc">Real call times from GHL Calendar. Click any card to open the participant.</div>
-      ${renderList(dc)}
-    </div>
-
-    <div class="today-section">
-      <div class="today-section-header">
-        <span class="today-section-title">Follow-Up Calls today</span>
-        <span class="today-section-count">${fu.length}</span>
-      </div>
-      <div class="today-section-desc">Second/third conversations after the initial DC. Outcome buttons live in the participant modal.</div>
-      ${renderList(fu)}
+    ${obSection('calls-today-master', '📞 Calls Today', totalCalls, '', callsInner)}
+    <div class="day-actions-master-header" id="day-actions-master-header">
+      <span class="day-actions-master-emoji">⚡</span>
+      <span class="day-actions-master-title">Day Actions Today</span>
     </div>
   `;
 }
