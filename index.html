@@ -1074,7 +1074,7 @@
       <!-- Book Follow-Up — visible when stage is DC Scheduled and FU calendar configured -->
       <div id="followup-section"></div>
 
-      <!-- Mark Inactive (Jackie marks unresponsive participants after Day 5) -->
+      <!-- Mark Inactive (Gabi marks unresponsive participants after Day 5) -->
       <div id="inactive-section"></div>
 
       <!-- Add note -->
@@ -2824,12 +2824,12 @@ function renderAccountability() {
 
     <div class="acc-section">
       <div class="acc-section-header">
-        <span class="acc-section-title">Jackie — open follow-ups</span>
+        <span class="acc-section-title">Gabi — open follow-ups</span>
         <span class="acc-section-count${jackie.length === 0 ? ' zero' : ''}">${jackie.length}</span>
       </div>
       <div class="acc-section-desc">Onboarding outreach stale 48h+ — Login Reachout missing, Welcome Message not sent, or CC booking step overdue.</div>
       ${jackie.length === 0
-        ? `<div class="acc-empty">✓ Jackie is on top of everything.</div>`
+        ? `<div class="acc-empty">✓ Gabi is on top of everything.</div>`
         : `<div class="acc-list">${jackie.map(renderAccCard).join('')}</div>`}
     </div>
   `;
@@ -3452,7 +3452,7 @@ function renderOutreachSection(p) {
   let buttons = [];
 
   if (stage === 'Participant') {
-    heading = 'Onboarding & Clarity Call outreach (Jackie)';
+    heading = 'Onboarding & Clarity Call outreach (Gabi)';
     description = 'Override only — the regular flow lives in the <strong>Onboarding</strong> tab. Use these buttons to log actions taken outside that flow, or to correct missed click-throughs.';
     if (!p.everfitLogin) {
       buttons.push({ col: 'Login Reachout Sent', label: 'Login Reachout' });
