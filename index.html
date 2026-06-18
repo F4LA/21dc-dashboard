@@ -888,19 +888,12 @@
 </header>
 
 <!-- ── View tabs ─────────────────────────────────────────── -->
+<!-- Consolidated to 5 tabs. "Today" is the operational hub: Calls Today + Action Queue + Onboarding actions -->
 <div class="view-tabs">
   <button class="view-tab active" data-view="tracker" onclick="setView('tracker')">Tracker</button>
   <button class="view-tab" data-view="today" onclick="setView('today')">
     Today
     <span class="view-tab-count" id="today-count">·</span>
-  </button>
-  <button class="view-tab" data-view="queue" onclick="setView('queue')">
-    Action Queue
-    <span class="view-tab-count" id="queue-count">0</span>
-  </button>
-  <button class="view-tab" data-view="onboarding" onclick="setView('onboarding')">
-    Onboarding
-    <span class="view-tab-count" id="onboarding-count">0</span>
   </button>
   <button class="view-tab" data-view="accountability" onclick="setView('accountability')">
     Accountability
@@ -913,6 +906,9 @@
     History
   </button>
 </div>
+<!-- Hidden counter holders preserved so existing renderFilters() code that updates them doesn't break -->
+<span id="queue-count" style="display:none">0</span>
+<span id="onboarding-count" style="display:none">0</span>
 
 <!-- ── Settings panel ─────────────────────────────────────── -->
 <div id="settings-overlay" onclick="onSettingsOverlayClick(event)">
@@ -984,7 +980,12 @@
     <div class="state-box" id="state-empty" style="display:none">
       <div class="state-label">No participants match this filter.</div>
     </div>
-    <!-- Table -->
+
+    <!-- Today view: Calls Today section (real call times from GHL Calendar) -->
+    <!-- Placed first so that in the consolidated Today master view, calls appear above the Action Queue table -->
+    <div class="today-wrap" id="today-wrap" style="display:none"></div>
+
+    <!-- Table (Tracker rows or Action Queue rows depending on view) -->
     <table id="data-table" style="display:none">
       <thead>
         <tr>
@@ -999,9 +1000,6 @@
       </thead>
       <tbody id="tbody"></tbody>
     </table>
-
-    <!-- Today view v2 (real call times from GHL Calendar) -->
-    <div class="today-wrap" id="today-wrap" style="display:none"></div>
 
     <!-- Onboarding view -->
     <div class="onboarding-wrap" id="onboarding-wrap" style="display:none"></div>
@@ -1144,6 +1142,9 @@ let searchQuery = '';
 
 // ── View tabs ─────────────────────────────────────────────
 function setView(view) {
+  // Legacy views (queue, onboarding) redirect to Today master view
+  if (view === 'queue' || view === 'onboarding') view = 'today';
+
   activeView = view;
   document.querySelectorAll('.view-tab').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.view === view);
@@ -1158,8 +1159,14 @@ function setView(view) {
   document.getElementById('analytics-wrap').style.display      = 'none';
   document.getElementById('history-wrap').style.display        = 'none';
 
-  if (view === 'today')               renderToday();
-  else if (view === 'onboarding')     renderOnboarding();
+  if (view === 'today') {
+    // Today is now the master operational view: Calls + Action Queue + Onboarding.
+    // Order matters: renderToday and renderOnboarding both hide data-table internally,
+    // so renderQueueTable must run LAST to setState('table') and make the queue visible.
+    renderToday();         // fills today-wrap with calls (async)
+    renderOnboarding();    // fills onboarding-wrap with onboarding sections (hides data-table)
+    renderQueueTable();    // fills data-table with Action Queue rows (setState('table') makes it visible)
+  }
   else if (view === 'accountability') renderAccountability();
   else if (view === 'analytics')      renderAnalytics();
   else if (view === 'history')        renderHistory();
@@ -1645,7 +1652,8 @@ async function loadNotesInBackground() {
       }
     });
     // Re-render current view to surface lastNote previews.
-    if (activeView === 'tracker' || activeView === 'queue') renderTable();
+    if (activeView === 'tracker') renderTable();
+    else if (activeView === 'today') renderQueueTable();  // Today contains the queue table
   } catch(err) {
     console.warn('Background notes load failed:', err);
   }
@@ -1730,10 +1738,10 @@ function renderFilters() {
   document.getElementById('onboarding-count').textContent     = getOnboardingCount();
   document.getElementById('accountability-count').textContent = getAccountabilityCount();
 
-  // Search bar visible in tracker + queue (where the table is shown)
+  // Search bar visible in tracker + today (Today now contains the Action Queue table)
   const searchWrap = document.getElementById('search-wrap');
   if (searchWrap) {
-    const showSearch = (activeView === 'tracker' || activeView === 'queue');
+    const showSearch = (activeView === 'tracker' || activeView === 'today');
     searchWrap.classList.toggle('visible', showSearch);
   }
 
@@ -1765,10 +1773,13 @@ function setSearch(value) {
   searchQuery = (value || '').toLowerCase().trim();
   const clearBtn = document.getElementById('search-clear');
   if (clearBtn) clearBtn.classList.toggle('visible', searchQuery.length > 0);
-  // Only re-render table if we're in tracker view
-  if (activeView === 'tracker' || activeView === 'queue') {
+  // Re-render the table where search applies: tracker or today (today contains the queue table)
+  if (activeView === 'tracker') {
     renderTable();
     renderFilters();   // counts may have changed
+  } else if (activeView === 'today') {
+    renderQueueTable();
+    renderFilters();
   }
 }
 
@@ -2774,7 +2785,11 @@ async function markOnboardingSent(email, type, btn) {
   btn.disabled = true;
   btn.textContent = '✓ Done';
 
-  setTimeout(() => { renderOnboarding(); renderFilters(); }, 700);
+  setTimeout(() => {
+    renderOnboarding();
+    if (activeView === 'today') renderQueueTable();   // Today master view needs queue restored
+    renderFilters();
+  }, 700);
 
   try {
     const res = await fetch(SCRIPT_URL, {
@@ -3339,7 +3354,7 @@ async function markAsNotLoggedInToEverfit() {
   renderOutreachSection(target);
   renderStats(); renderFilters();
   if (activeView === 'tracker') renderTable();
-  else if (activeView === 'onboarding') renderOnboarding();
+  else if (activeView === 'today') { renderOnboarding(); renderQueueTable(); }
   else if (activeView === 'accountability') renderAccountability();
 
   try {
@@ -3382,7 +3397,7 @@ async function markLoggedInToEverfit() {
   renderOutreachSection(target);
   renderStats(); renderFilters();
   if (activeView === 'tracker') renderTable();
-  else if (activeView === 'onboarding') renderOnboarding();
+  else if (activeView === 'today') { renderOnboarding(); renderQueueTable(); }
   else if (activeView === 'accountability') renderAccountability();
 
   try {
@@ -3544,7 +3559,7 @@ async function manualMarkBooking(column) {
   renderManualBookingSection(target);
   renderStats(); renderFilters();
   if (activeView === 'tracker') renderTable();
-  else if (activeView === 'onboarding') renderOnboarding();
+  else if (activeView === 'today') { renderOnboarding(); renderQueueTable(); }
 
   try {
     const res = await fetch(SCRIPT_URL, {
@@ -3978,7 +3993,7 @@ async function markInactive() {
   renderInactiveSection(target);
   renderStats(); renderFilters();
   if (activeView === 'tracker') renderTable();
-  else if (activeView === 'onboarding') renderOnboarding();
+  else if (activeView === 'today') { renderOnboarding(); renderQueueTable(); }
   else if (activeView === 'accountability') renderAccountability();
 
   try {
@@ -4052,7 +4067,7 @@ async function markRefunded() {
   renderRefundSection(target);
   renderStats(); renderFilters();
   if (activeView === 'tracker') renderTable();
-  else if (activeView === 'onboarding') renderOnboarding();
+  else if (activeView === 'today') { renderOnboarding(); renderQueueTable(); }
   else if (activeView === 'accountability') renderAccountability();
   else if (activeView === 'analytics') renderAnalytics();
 
@@ -4092,7 +4107,7 @@ async function undoRefund() {
   renderRefundSection(target);
   renderStats(); renderFilters();
   if (activeView === 'tracker') renderTable();
-  else if (activeView === 'onboarding') renderOnboarding();
+  else if (activeView === 'today') { renderOnboarding(); renderQueueTable(); }
   else if (activeView === 'accountability') renderAccountability();
   else if (activeView === 'analytics') renderAnalytics();
 
