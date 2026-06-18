@@ -1948,6 +1948,13 @@ function renderTrackerTable() {
 function renderQueueTable() {
   let queue = getActionQueue();
 
+  // While the Today master view is still loading (state-loading visible),
+  // skip setState('table') so the data-table doesn't flash before the rest
+  // of the master view (calls + onboarding) is ready. The fill-tbody work
+  // still happens so the table is ready to show when loading ends.
+  const masterLoading = activeView === 'today' &&
+    document.getElementById('state-loading').style.display === 'block';
+
   // Apply search query if present
   if (searchQuery) {
     queue = queue.filter(({ p }) => {
@@ -1965,6 +1972,16 @@ function renderQueueTable() {
   document.querySelectorAll('#data-table thead th')[5].textContent = 'Last note';
 
   if (queue.length === 0) {
+    if (masterLoading) {
+      document.getElementById('tbody').innerHTML = `
+        <tr><td colspan="7">
+          <div class="queue-empty">
+            <div class="queue-empty-emoji">✨</div>
+            <div>Nothing to do right now. Everyone is on track.</div>
+          </div>
+        </td></tr>`;
+      return;
+    }
     setState('table');
     document.getElementById('tbody').innerHTML = `
       <tr><td colspan="7">
@@ -1976,7 +1993,7 @@ function renderQueueTable() {
     return;
   }
 
-  setState('table');
+  if (!masterLoading) setState('table');
   document.getElementById('tbody').innerHTML = queue.map(({ p, action }) => {
     const st  = STAGE_STYLE[p.stageName] || {bg:'#f1f5f9',text:'#475569',dot:'#94a3b8'};
     const ini = initials(p.name);
@@ -2321,9 +2338,13 @@ function obSection(key, title, count, desc, bodyHtml, defaultCollapsed) {
 }
 
 // ── Day Actions Today master toggle (collapses Action Queue + Onboarding together)
+// Defaults to collapsed on first visit; user expands it manually if desired.
 function isDayActionsCollapsed() {
-  try { return localStorage.getItem('day-actions-collapsed') === '1'; }
-  catch(e) { return false; }
+  try {
+    const v = localStorage.getItem('day-actions-collapsed');
+    if (v === null) return true;  // default collapsed
+    return v === '1';
+  } catch(e) { return true; }
 }
 function applyDayActionsCollapseState() {
   const collapsed = isDayActionsCollapsed();
@@ -2471,16 +2492,17 @@ function renderTodayContent(wrap, events) {
   // Nested structure: top-level "Calls Today" master section, with the three
   // call types as collapsible sub-sections inside it. Uses obSection() for
   // collapse + localStorage persistence (same machinery as Onboarding).
+  // All sub-sections default to collapsed — user expands the ones they want.
   const callsInner = `
     ${obSection('calls-cc', 'Clarity Calls today', cc.length,
       'Real call times from GHL Calendar. Click any card to open the participant.',
-      renderList(cc))}
+      renderList(cc), true /* defaultCollapsed */)}
     ${obSection('calls-dc', 'Discovery Calls today', dc.length,
       'Real call times from GHL Calendar. Click any card to open the participant.',
-      renderList(dc))}
+      renderList(dc), true /* defaultCollapsed */)}
     ${obSection('calls-fu', 'Follow-Up Calls today', fu.length,
       'Second/third conversations after the initial DC. Outcome buttons live in the participant modal.',
-      renderList(fu))}
+      renderList(fu), true /* defaultCollapsed */)}
   `;
 
   wrap.innerHTML = `
@@ -2738,23 +2760,21 @@ function renderOnboarding() {
     : `<div class="ob-list">${setup.map(p => renderSetupTaskCard(p)).join('')}</div>`;
 
   document.getElementById('onboarding-wrap').innerHTML = `
-    ${dayLabel ? `<div style="font-size:13px;color:var(--accent,#5b3def);font-weight:600;margin:4px 0 20px 4px;letter-spacing:0.2px">${esc(dayLabel)}</div>` : ''}
-
     ${obSection('login_reachout', 'Login Reachout', noEverfit.length,
       `Participants who purchased 24h+ ago and haven't logged into Everfit. Send via <strong>email</strong> (not Everfit DM — they can't receive Everfit messages yet).`,
-      loginBody)}
+      loginBody, true /* defaultCollapsed */)}
 
     ${obSection('welcome_message', 'Welcome Message', welcome.length,
       `Participants who logged into Everfit and haven't received a Welcome Message yet. Send via <strong>Everfit DM</strong>.`,
-      welcomeBody)}
+      welcomeBody, true /* defaultCollapsed */)}
 
     ${obSection('setup_tasks', 'Setup Tasks (Training & Calories)', setup.length,
       `Participants who logged in and still need their training plan and/or calorie targets assigned in Everfit. Check the intake form in Everfit, then assign and mark here. The list stays visible until both are marked — review daily.`,
-      setupBody)}
+      setupBody, true /* defaultCollapsed */)}
 
     ${obSection('cc_booking', 'CC Booking Outreach', ccBooking.length,
       `New booking flow: Day 2 DM → Day 4 Call → Day 19 Offer Doc. Each step shows when its scheduled day arrives.`,
-      ccBookingBody)}
+      ccBookingBody, true /* defaultCollapsed */)}
   `;
 }
 
