@@ -579,6 +579,46 @@
       letter-spacing: 0.2px;
     }
 
+    /* ── Action Queue cards (inside Actions Today) ─────────── */
+    /* Card-based replacement for the legacy data-table queue rendering.
+       Each card shows identity + stage/time + suggested action + last note. */
+    .aq-list { display: flex; flex-direction: column; gap: 10px; }
+    .aq-card {
+      display: grid;
+      grid-template-columns: minmax(180px, 1.4fr) minmax(140px, 1fr) minmax(140px, 1.1fr) minmax(180px, 1.6fr);
+      gap: 16px;
+      align-items: center;
+      padding: 14px 18px;
+      background: var(--surface, #fff);
+      border: 1px solid var(--border, #e5e7eb);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .aq-card:hover {
+      border-color: var(--accent, #5b3def);
+      box-shadow: 0 2px 8px rgba(91,61,239,0.08);
+    }
+    .aq-card-identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .aq-card-meta { min-width: 0; flex: 1; }
+    .aq-card-name { font-size: 14px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .aq-card-email { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .aq-card-status { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+    .aq-card-action { display: flex; align-items: center; }
+    .aq-card-note-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .aq-card-note { flex: 1; min-width: 0; font-size: 12px; }
+    .aq-card-note .note-text { color: var(--text-secondary, #4b5563); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .aq-card-note .note-ago { color: var(--text-muted); font-size: 11px; margin-top: 2px; }
+    .aq-card-note.note-empty { color: var(--text-muted); font-style: italic; }
+    .aq-card-note-btn { flex-shrink: 0; }
+    @media (max-width: 800px) {
+      .aq-card {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+      .aq-card-status, .aq-card-action, .aq-card-note-wrap { align-items: flex-start; }
+    }
+
     /* ── Onboarding view ─────────────────────────────────── */
     .onboarding-wrap { padding: 0; }
     .ob-section {
@@ -1194,17 +1234,14 @@ function setView(view) {
   document.getElementById('history-wrap').style.display        = 'none';
 
   if (view === 'today') {
-    // Today is the master operational view: Calls + Action Queue + Onboarding.
-    // We await renderToday so the GHL Calendar fetch completes before we render
-    // the rest — this keeps a single global loading spinner visible until all
-    // three sections are ready, instead of a piecemeal "loading + already-rendered"
-    // appearance.
+    // Today is the master operational view: Calls + Actions Today (Action
+    // Queue + Onboarding sub-sections). renderOnboarding now includes the
+    // Action Queue as its first obSection, so no separate queue render call
+    // is needed. The data-table stays hidden — it's reserved for Tracker.
+    document.getElementById('data-table').style.display = 'none';
     (async () => {
-      await renderToday();
-      renderOnboarding();
-      renderQueueTable();
-      // Apply Day Actions Today collapsed state from localStorage (after queue
-      // and onboarding made their sub-containers visible).
+      await renderToday();   // GHL Calendar fetch + fill today-wrap
+      renderOnboarding();    // fills onboarding-wrap with Action Queue + 4 sub-sections
       applyDayActionsCollapseState();
     })();
   }
@@ -1946,14 +1983,16 @@ function renderTrackerTable() {
 }
 
 function renderQueueTable() {
-  let queue = getActionQueue();
+  // In Today master view, the Action Queue is rendered as an obSection
+  // (cards) inside Actions Today, via renderOnboarding. The data-table is
+  // reserved for Tracker view only. So when in 'today', route through
+  // renderOnboarding which now includes the Action Queue card section.
+  if (activeView === 'today') {
+    renderOnboarding();
+    return;
+  }
 
-  // While the Today master view is still loading (state-loading visible),
-  // skip setState('table') so the data-table doesn't flash before the rest
-  // of the master view (calls + onboarding) is ready. The fill-tbody work
-  // still happens so the table is ready to show when loading ends.
-  const masterLoading = activeView === 'today' &&
-    document.getElementById('state-loading').style.display === 'block';
+  let queue = getActionQueue();
 
   // Apply search query if present
   if (searchQuery) {
@@ -1972,16 +2011,6 @@ function renderQueueTable() {
   document.querySelectorAll('#data-table thead th')[5].textContent = 'Last note';
 
   if (queue.length === 0) {
-    if (masterLoading) {
-      document.getElementById('tbody').innerHTML = `
-        <tr><td colspan="7">
-          <div class="queue-empty">
-            <div class="queue-empty-emoji">✨</div>
-            <div>Nothing to do right now. Everyone is on track.</div>
-          </div>
-        </td></tr>`;
-      return;
-    }
     setState('table');
     document.getElementById('tbody').innerHTML = `
       <tr><td colspan="7">
@@ -1993,7 +2022,7 @@ function renderQueueTable() {
     return;
   }
 
-  if (!masterLoading) setState('table');
+  setState('table');
   document.getElementById('tbody').innerHTML = queue.map(({ p, action }) => {
     const st  = STAGE_STYLE[p.stageName] || {bg:'#f1f5f9',text:'#475569',dot:'#94a3b8'};
     const ini = initials(p.name);
@@ -2348,12 +2377,8 @@ function isDayActionsCollapsed() {
 }
 function applyDayActionsCollapseState() {
   const collapsed = isDayActionsCollapsed();
-  const dataTable = document.getElementById('data-table');
   const onboardingWrap = document.getElementById('onboarding-wrap');
-  if (collapsed) {
-    if (dataTable) dataTable.style.display = 'none';
-    if (onboardingWrap) onboardingWrap.style.display = 'none';
-  }
+  if (collapsed && onboardingWrap) onboardingWrap.style.display = 'none';
   const header = document.getElementById('day-actions-master-header');
   if (header) header.classList.toggle('collapsed', collapsed);
 }
@@ -2361,15 +2386,8 @@ function toggleDayActions() {
   const next = !isDayActionsCollapsed();
   try { localStorage.setItem('day-actions-collapsed', next ? '1' : '0'); }
   catch(e) {}
-  const dataTable = document.getElementById('data-table');
   const onboardingWrap = document.getElementById('onboarding-wrap');
-  if (next) {
-    if (dataTable) dataTable.style.display = 'none';
-    if (onboardingWrap) onboardingWrap.style.display = 'none';
-  } else {
-    if (dataTable) dataTable.style.display = 'table';
-    if (onboardingWrap) onboardingWrap.style.display = 'block';
-  }
+  if (onboardingWrap) onboardingWrap.style.display = next ? 'none' : 'block';
   const header = document.getElementById('day-actions-master-header');
   if (header) header.classList.toggle('collapsed', next);
 }
@@ -2511,7 +2529,7 @@ function renderTodayContent(wrap, events) {
     <div class="day-actions-master-header" id="day-actions-master-header" onclick="toggleDayActions()">
       <span class="day-actions-master-chevron">▼</span>
       <span class="day-actions-master-emoji">⚡</span>
-      <span class="day-actions-master-title">Day Actions Today</span>
+      <span class="day-actions-master-title">Actions Today</span>
     </div>
   `;
 }
@@ -2721,13 +2739,73 @@ function hasStageAdvancedAfter(p, callType, eventEndMs) {
   return false;
 }
 
-function renderOnboarding() {
-  document.getElementById('state-loading').style.display = 'none';
-  document.getElementById('state-error').style.display   = 'none';
-  document.getElementById('state-empty').style.display   = 'none';
-  document.getElementById('data-table').style.display    = 'none';
-  document.getElementById('onboarding-wrap').style.display = 'block';
+// ── Action Queue as an obSection (used inside the Today master view) ──
+// The legacy data-table version still exists in renderQueueTable() for
+// Tracker fallback paths. In Today view, the Action Queue is rendered
+// here as cards inside Actions Today, sitting next to Login Reachout, etc.
+function renderActionQueueSection() {
+  let queue = getActionQueue();
+  if (searchQuery) {
+    queue = queue.filter(({ p }) => {
+      const name = (p.name || '').toLowerCase();
+      const email = (p.email || '').toLowerCase();
+      return name.includes(searchQuery) || email.includes(searchQuery);
+    });
+  }
+  const body = queue.length === 0
+    ? `<div class="ob-empty">✨ Nothing to do right now. Everyone is on track.</div>`
+    : `<div class="aq-list">${queue.map(renderActionQueueCard).join('')}</div>`;
+  return obSection(
+    'action-queue',
+    'Action Queue',
+    queue.length,
+    `Outreach actions that need to happen — for Deniz (CC/DC reschedule cadence) and Bernardo (Day 4 calls).`,
+    body,
+    true /* defaultCollapsed */
+  );
+}
 
+function renderActionQueueCard({ p, action }) {
+  const st  = STAGE_STYLE[p.stageName] || {bg:'#f1f5f9',text:'#475569',dot:'#94a3b8'};
+  const ini = initials(p.name);
+  const clr = nameColor(p.name);
+  const timeClass = p.stageAgeMs > 72*3600000 ? 'danger'
+                  : p.stageAgeMs > 48*3600000 ? 'warn' : '';
+  const lastNote = p.lastNote;
+  return `
+    <div class="aq-card" onclick="openModal('${esc(p.email)}')">
+      <div class="aq-card-identity">
+        <div class="avatar" style="background:${clr}">${ini}</div>
+        <div class="aq-card-meta">
+          <div class="aq-card-name">${esc(p.name)}</div>
+          <div class="aq-card-email">${esc(p.email||'')}</div>
+        </div>
+      </div>
+      <div class="aq-card-status">
+        <span class="stage-badge" style="background:${st.bg};color:${st.text}">
+          <span class="stage-dot" style="background:${st.dot}"></span>
+          ${esc(p.stageName)}
+        </span>
+        <span class="time-cell ${timeClass}">${fmtDuration(p.stageAgeMs)}</span>
+      </div>
+      <div class="aq-card-action">
+        <span class="suggested-action ${action.tone || ''}">${esc(action.label)}</span>
+      </div>
+      <div class="aq-card-note-wrap">
+        ${lastNote
+          ? `<div class="aq-card-note">
+               <div class="note-text">${esc(stripHtml(lastNote.body))}</div>
+               <div class="note-ago">${timeAgo(lastNote.dateAdded)}</div>
+             </div>`
+          : `<div class="aq-card-note note-empty">No notes yet</div>`}
+        <button class="btn btn-ghost btn-sm aq-card-note-btn"
+          onclick="event.stopPropagation();openModal('${esc(p.email)}')">+ Note</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderOnboarding() {
   const noEverfit  = getOnboardingNoEverfit();
   const welcome    = getWelcomeQueue();
   const setup      = getSetupTasksQueue();
@@ -2759,7 +2837,14 @@ function renderOnboarding() {
     ? `<div class="ob-empty">✨ Everyone is set up.</div>`
     : `<div class="ob-list">${setup.map(p => renderSetupTaskCard(p)).join('')}</div>`;
 
+  // In Today master view, the Action Queue lives as the first obSection
+  // (above Login Reachout, Welcome, etc). In legacy onboarding-only paths
+  // (none today, but kept defensive), skip the Action Queue prefix.
+  const actionQueueHtml = (activeView === 'today') ? renderActionQueueSection() : '';
+
   document.getElementById('onboarding-wrap').innerHTML = `
+    ${actionQueueHtml}
+
     ${obSection('login_reachout', 'Login Reachout', noEverfit.length,
       `Participants who purchased 24h+ ago and haven't logged into Everfit. Send via <strong>email</strong> (not Everfit DM — they can't receive Everfit messages yet).`,
       loginBody, true /* defaultCollapsed */)}
@@ -2776,6 +2861,20 @@ function renderOnboarding() {
       `New booking flow: Day 2 DM → Day 4 Call → Day 19 Offer Doc. Each step shows when its scheduled day arrives.`,
       ccBookingBody, true /* defaultCollapsed */)}
   `;
+
+  // If the Today master view is still loading (global state-loading visible),
+  // leave onboarding-wrap hidden — the setView('today') IIFE will reveal it
+  // when the calls fetch resolves. Otherwise reveal it and hide other state
+  // containers (matches the legacy behavior of this function).
+  const stillLoading = activeView === 'today' &&
+    document.getElementById('state-loading').style.display === 'block';
+  if (stillLoading) return;
+
+  document.getElementById('state-loading').style.display = 'none';
+  document.getElementById('state-error').style.display   = 'none';
+  document.getElementById('state-empty').style.display   = 'none';
+  document.getElementById('data-table').style.display    = 'none';
+  document.getElementById('onboarding-wrap').style.display = 'block';
 }
 
 // Setup Task card: training + calories buttons in one row.
@@ -2876,8 +2975,7 @@ async function markOnboardingSent(email, type, btn) {
   btn.textContent = '✓ Done';
 
   setTimeout(() => {
-    renderOnboarding();
-    if (activeView === 'today') renderQueueTable();   // Today master view needs queue restored
+    renderOnboarding();   // also re-renders the Action Queue section in Today master view
     renderFilters();
   }, 700);
 
@@ -3444,7 +3542,7 @@ async function markAsNotLoggedInToEverfit() {
   renderOutreachSection(target);
   renderStats(); renderFilters();
   if (activeView === 'tracker') renderTable();
-  else if (activeView === 'today') { renderOnboarding(); renderQueueTable(); }
+  else if (activeView === 'today') renderOnboarding();   // renderOnboarding now includes the Action Queue
   else if (activeView === 'accountability') renderAccountability();
 
   try {
@@ -3487,7 +3585,7 @@ async function markLoggedInToEverfit() {
   renderOutreachSection(target);
   renderStats(); renderFilters();
   if (activeView === 'tracker') renderTable();
-  else if (activeView === 'today') { renderOnboarding(); renderQueueTable(); }
+  else if (activeView === 'today') renderOnboarding();   // renderOnboarding now includes the Action Queue
   else if (activeView === 'accountability') renderAccountability();
 
   try {
@@ -3649,7 +3747,7 @@ async function manualMarkBooking(column) {
   renderManualBookingSection(target);
   renderStats(); renderFilters();
   if (activeView === 'tracker') renderTable();
-  else if (activeView === 'today') { renderOnboarding(); renderQueueTable(); }
+  else if (activeView === 'today') renderOnboarding();   // renderOnboarding now includes the Action Queue
 
   try {
     const res = await fetch(SCRIPT_URL, {
@@ -4083,7 +4181,7 @@ async function markInactive() {
   renderInactiveSection(target);
   renderStats(); renderFilters();
   if (activeView === 'tracker') renderTable();
-  else if (activeView === 'today') { renderOnboarding(); renderQueueTable(); }
+  else if (activeView === 'today') renderOnboarding();   // renderOnboarding now includes the Action Queue
   else if (activeView === 'accountability') renderAccountability();
 
   try {
@@ -4157,7 +4255,7 @@ async function markRefunded() {
   renderRefundSection(target);
   renderStats(); renderFilters();
   if (activeView === 'tracker') renderTable();
-  else if (activeView === 'today') { renderOnboarding(); renderQueueTable(); }
+  else if (activeView === 'today') renderOnboarding();   // renderOnboarding now includes the Action Queue
   else if (activeView === 'accountability') renderAccountability();
   else if (activeView === 'analytics') renderAnalytics();
 
@@ -4197,7 +4295,7 @@ async function undoRefund() {
   renderRefundSection(target);
   renderStats(); renderFilters();
   if (activeView === 'tracker') renderTable();
-  else if (activeView === 'today') { renderOnboarding(); renderQueueTable(); }
+  else if (activeView === 'today') renderOnboarding();   // renderOnboarding now includes the Action Queue
   else if (activeView === 'accountability') renderAccountability();
   else if (activeView === 'analytics') renderAnalytics();
 
