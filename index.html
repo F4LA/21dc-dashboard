@@ -545,6 +545,50 @@
     .resched-status.error { background: #fee2e2; color: #991b1b; }
     .resched-status.info { background: #dbeafe; color: #1e40af; }
 
+    /* ── Owner filter bar (Today view) ───────────────────────── */
+    /* Pills at the top of Today let each role narrow the view to their work.
+       The hide rules use class selectors on the parent .main so the CSS only
+       applies inside Today (other views don't carry the filter-* class). */
+    .owner-filter-bar {
+      display: flex; align-items: center; gap: 8px;
+      margin: 0 0 16px 0;
+      padding: 10px 14px;
+      background: var(--surface, #fff);
+      border: 1px solid var(--border, #e5e7eb);
+      border-radius: 10px;
+      flex-wrap: wrap;
+    }
+    .owner-filter-label {
+      font-size: 12px; font-weight: 600;
+      color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;
+      margin-right: 4px;
+    }
+    .owner-filter-pill {
+      font-size: 13px; font-weight: 500;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: transparent;
+      border: 1px solid var(--border, #e5e7eb);
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .owner-filter-pill:hover { background: #f3f4f6; }
+    .owner-filter-pill.active {
+      background: var(--accent, #5b3def);
+      color: white;
+      border-color: var(--accent, #5b3def);
+    }
+    /* Filter hide rules: when the selected owner doesn't include a section's
+       owner class, hide that section. Mixed sections (e.g., "owner-gabi
+       owner-bernardo") show for both Gabi and Bernardo. */
+    .main.filter-gabi .owner-deniz:not(.owner-gabi),
+    .main.filter-gabi .owner-bernardo:not(.owner-gabi) { display: none; }
+    .main.filter-bernardo .owner-deniz:not(.owner-bernardo),
+    .main.filter-bernardo .owner-gabi:not(.owner-bernardo) { display: none; }
+    .main.filter-deniz .owner-gabi:not(.owner-deniz),
+    .main.filter-deniz .owner-bernardo:not(.owner-deniz) { display: none; }
+
     /* ── Actions Today master header (Today view) ──────────── */
     /* Visually matches the obSection header used by Calls Today so both
        top-level Today sections have the same styling. Click toggles the
@@ -1309,7 +1353,13 @@ function setView(view) {
       await renderToday();   // GHL Calendar fetch + fill today-wrap
       renderOnboarding();    // fills onboarding-wrap with Action Queue + 4 sub-sections
       applyDayActionsCollapseState();
+      applyOwnerFilter();    // re-apply the owner filter after sections render
     })();
+  } else {
+    // Leaving Today — clear the filter-* class from .main so other views
+    // aren't accidentally affected by CSS rules.
+    const main = document.querySelector('.main');
+    if (main) main.classList.remove('filter-all', 'filter-gabi', 'filter-bernardo', 'filter-deniz');
   }
   else if (view === 'accountability') renderAccountability();
   else if (view === 'analytics')      renderAnalytics();
@@ -2521,6 +2571,48 @@ function toggleDayActions() {
   if (header) header.classList.toggle('collapsed', next);
 }
 
+// ── Owner filter (Today master view) ───────────────────────────
+// Hides sections that don't belong to the selected owner so each role
+// sees only their work. Persisted in localStorage so the user's choice
+// sticks across visits. Mixed-ownership sections get multiple classes.
+function getOwnerFilter() {
+  try { return localStorage.getItem('today-owner-filter') || 'all'; }
+  catch(e) { return 'all'; }
+}
+function setOwnerFilter(owner) {
+  try { localStorage.setItem('today-owner-filter', owner); }
+  catch(e) {}
+  applyOwnerFilter();
+}
+function applyOwnerFilter() {
+  const owner = getOwnerFilter();
+  const main = document.querySelector('.main');
+  if (!main) return;
+  main.classList.remove('filter-all', 'filter-gabi', 'filter-bernardo', 'filter-deniz');
+  main.classList.add('filter-' + owner);
+  document.querySelectorAll('.owner-filter-pill').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.owner === owner);
+  });
+}
+function renderOwnerFilterBar() {
+  const cur = getOwnerFilter();
+  const opts = [
+    { id: 'all',      label: 'All' },
+    { id: 'gabi',     label: 'Gabi' },
+    { id: 'bernardo', label: 'Bernardo' },
+    { id: 'deniz',    label: 'Deniz' }
+  ];
+  return `
+    <div class="owner-filter-bar">
+      <span class="owner-filter-label">View:</span>
+      ${opts.map(o => `
+        <button class="owner-filter-pill${cur === o.id ? ' active' : ''}"
+          data-owner="${o.id}" onclick="setOwnerFilter('${o.id}')">${esc(o.label)}</button>
+      `).join('')}
+    </div>
+  `;
+}
+
 // ── Today view v2 (GHL Calendar-backed) ──────────────────
 // Fetches today's CC + DC events from GHL Calendar, matches each to a
 // participant by email, and renders a worklist. Uses REAL call times
@@ -2653,8 +2745,11 @@ function renderTodayContent(wrap, events) {
   `;
 
   wrap.innerHTML = `
+    ${renderOwnerFilterBar()}
     <div class="today-header">${esc(dateLabel)}</div>
-    ${obSection('calls-today-master', '📞 Calls Today', totalCalls, '', callsInner, true /* defaultCollapsed */)}
+    <div class="owner-deniz">
+      ${obSection('calls-today-master', '📞 Calls Today', totalCalls, '', callsInner, true /* defaultCollapsed */)}
+    </div>
     <div class="day-actions-master-header" id="day-actions-master-header" onclick="toggleDayActions()">
       <span class="day-actions-master-chevron">▼</span>
       <span class="day-actions-master-emoji">⚡</span>
@@ -3137,26 +3232,30 @@ function renderOnboarding() {
   // (none today, but kept defensive), skip the Action Queue prefix.
   const actionQueueHtml = (activeView === 'today') ? renderActionQueueSection() : '';
 
+  // Each section is wrapped with owner classes used by the Today owner filter.
+  // - "owner-deniz" = Action Queue (reschedule cadence)
+  // - "owner-gabi"  = Gabi-only outreach (Login, Welcome, Setup)
+  // - "owner-gabi owner-bernardo" = mixed (Intake Form, CC Booking)
   document.getElementById('onboarding-wrap').innerHTML = `
-    ${actionQueueHtml}
+    <div class="owner-deniz">${actionQueueHtml}</div>
 
-    ${obSection('login_reachout', 'Login Reachout', noEverfit.length,
+    <div class="owner-gabi">${obSection('login_reachout', 'Login Reachout', noEverfit.length,
       `Participants who purchased 24h+ ago and haven't logged into Everfit. Send via <strong>email</strong> (not Everfit DM — they can't receive Everfit messages yet).`,
-      loginBody, true /* defaultCollapsed */)}
+      loginBody, true /* defaultCollapsed */)}</div>
 
-    ${obSection('welcome_message', 'Welcome Message', welcome.length,
+    <div class="owner-gabi">${obSection('welcome_message', 'Welcome Message', welcome.length,
       `Participants who logged into Everfit and haven't received a Welcome Message yet. Send via <strong>Everfit DM</strong>.`,
-      welcomeBody, true /* defaultCollapsed */)}
+      welcomeBody, true /* defaultCollapsed */)}</div>
 
-    ${(activeView === 'today') ? renderIntakeFormSection() : ''}
+    <div class="owner-gabi owner-bernardo">${(activeView === 'today') ? renderIntakeFormSection() : ''}</div>
 
-    ${obSection('setup_tasks', 'Setup Tasks (Training & Calories)', setup.length,
+    <div class="owner-gabi">${obSection('setup_tasks', 'Setup Tasks (Training & Calories)', setup.length,
       `Participants who logged in and still need their training plan and/or calorie targets assigned in Everfit. Check the intake form in Everfit, then assign and mark here. The list stays visible until both are marked — review daily.`,
-      setupBody, true /* defaultCollapsed */)}
+      setupBody, true /* defaultCollapsed */)}</div>
 
-    ${obSection('cc_booking', 'CC Booking Outreach', ccBooking.length,
+    <div class="owner-gabi owner-bernardo">${obSection('cc_booking', 'CC Booking Outreach', ccBooking.length,
       `New booking flow: Day 2 DM → Day 4 Call → Day 19 Offer Doc. Each step shows when its scheduled day arrives.`,
-      ccBookingBody, true /* defaultCollapsed */)}
+      ccBookingBody, true /* defaultCollapsed */)}</div>
   `;
 
   // If the Today master view is still loading (global state-loading visible),
