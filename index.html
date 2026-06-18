@@ -546,16 +546,33 @@
     .resched-status.info { background: #dbeafe; color: #1e40af; }
 
     /* ── Day Actions master header (Today view) ──────────── */
-    /* Visual divider between "Calls Today" master section and the operational
-       worklist (Action Queue + Onboarding sections) below it. */
+    /* Collapsible parent of the operational worklist (Action Queue + Onboarding).
+       Clicking the header toggles visibility of both child sections together. */
     .day-actions-master-header {
-      display: flex; align-items: center; gap: 10px;
+      display: flex; align-items: center; gap: 12px;
       margin: 32px 0 16px 0;
       padding: 14px 18px;
       background: linear-gradient(90deg, var(--accent-light, #ede9fe) 0%, transparent 100%);
       border-left: 4px solid var(--accent, #5b3def);
       border-radius: 8px;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s;
     }
+    .day-actions-master-header:hover { filter: brightness(0.97); }
+    .day-actions-master-chevron {
+      display: inline-flex;
+      align-items: center; justify-content: center;
+      font-size: 12px;
+      color: var(--accent, #5b3def);
+      background: white;
+      transition: transform 0.2s ease;
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .day-actions-master-header.collapsed .day-actions-master-chevron { transform: rotate(-90deg); }
     .day-actions-master-emoji { font-size: 20px; line-height: 1; }
     .day-actions-master-title {
       font-size: 17px; font-weight: 700; color: var(--text-primary);
@@ -1177,12 +1194,19 @@ function setView(view) {
   document.getElementById('history-wrap').style.display        = 'none';
 
   if (view === 'today') {
-    // Today is now the master operational view: Calls + Action Queue + Onboarding.
-    // Order matters: renderToday and renderOnboarding both hide data-table internally,
-    // so renderQueueTable must run LAST to setState('table') and make the queue visible.
-    renderToday();         // fills today-wrap with calls (async)
-    renderOnboarding();    // fills onboarding-wrap with onboarding sections (hides data-table)
-    renderQueueTable();    // fills data-table with Action Queue rows (setState('table') makes it visible)
+    // Today is the master operational view: Calls + Action Queue + Onboarding.
+    // We await renderToday so the GHL Calendar fetch completes before we render
+    // the rest — this keeps a single global loading spinner visible until all
+    // three sections are ready, instead of a piecemeal "loading + already-rendered"
+    // appearance.
+    (async () => {
+      await renderToday();
+      renderOnboarding();
+      renderQueueTable();
+      // Apply Day Actions Today collapsed state from localStorage (after queue
+      // and onboarding made their sub-containers visible).
+      applyDayActionsCollapseState();
+    })();
   }
   else if (view === 'accountability') renderAccountability();
   else if (view === 'analytics')      renderAnalytics();
@@ -2261,10 +2285,15 @@ async function runHistAIAnalysis(challengeName, btn) {
 }
 
 // ── Onboarding view ───────────────────────────────────────
-// Collapsible section state — persisted in localStorage
-function isSectionCollapsed(key) {
-  try { return localStorage.getItem('ob-section-collapsed:' + key) === '1'; }
-  catch(e) { return false; }
+// Collapsible section state — persisted in localStorage. When no preference is
+// stored yet, falls back to `defaultCollapsed` (which lets a caller default
+// certain sections to closed on first visit).
+function isSectionCollapsed(key, defaultCollapsed) {
+  try {
+    const v = localStorage.getItem('ob-section-collapsed:' + key);
+    if (v === null) return !!defaultCollapsed;
+    return v === '1';
+  } catch(e) { return !!defaultCollapsed; }
 }
 function toggleSection(key) {
   const el = document.querySelector(`[data-section-key="${key}"]`);
@@ -2274,8 +2303,8 @@ function toggleSection(key) {
   try { localStorage.setItem('ob-section-collapsed:' + key, collapsed ? '1' : '0'); }
   catch(e) {}
 }
-function obSection(key, title, count, desc, bodyHtml) {
-  const collapsedClass = isSectionCollapsed(key) ? ' collapsed' : '';
+function obSection(key, title, count, desc, bodyHtml, defaultCollapsed) {
+  const collapsedClass = isSectionCollapsed(key, defaultCollapsed) ? ' collapsed' : '';
   return `
     <div class="ob-section${collapsedClass}" data-section-key="${esc(key)}">
       <div class="ob-section-header" onclick="toggleSection('${esc(key)}')">
@@ -2291,6 +2320,39 @@ function obSection(key, title, count, desc, bodyHtml) {
   `;
 }
 
+// ── Day Actions Today master toggle (collapses Action Queue + Onboarding together)
+function isDayActionsCollapsed() {
+  try { return localStorage.getItem('day-actions-collapsed') === '1'; }
+  catch(e) { return false; }
+}
+function applyDayActionsCollapseState() {
+  const collapsed = isDayActionsCollapsed();
+  const dataTable = document.getElementById('data-table');
+  const onboardingWrap = document.getElementById('onboarding-wrap');
+  if (collapsed) {
+    if (dataTable) dataTable.style.display = 'none';
+    if (onboardingWrap) onboardingWrap.style.display = 'none';
+  }
+  const header = document.getElementById('day-actions-master-header');
+  if (header) header.classList.toggle('collapsed', collapsed);
+}
+function toggleDayActions() {
+  const next = !isDayActionsCollapsed();
+  try { localStorage.setItem('day-actions-collapsed', next ? '1' : '0'); }
+  catch(e) {}
+  const dataTable = document.getElementById('data-table');
+  const onboardingWrap = document.getElementById('onboarding-wrap');
+  if (next) {
+    if (dataTable) dataTable.style.display = 'none';
+    if (onboardingWrap) onboardingWrap.style.display = 'none';
+  } else {
+    if (dataTable) dataTable.style.display = 'table';
+    if (onboardingWrap) onboardingWrap.style.display = 'block';
+  }
+  const header = document.getElementById('day-actions-master-header');
+  if (header) header.classList.toggle('collapsed', next);
+}
+
 // ── Today view v2 (GHL Calendar-backed) ──────────────────
 // Fetches today's CC + DC events from GHL Calendar, matches each to a
 // participant by email, and renders a worklist. Uses REAL call times
@@ -2298,23 +2360,16 @@ function obSection(key, title, count, desc, bodyHtml) {
 let __todayCache = { events: [], fetchedAt: 0, error: null };
 
 async function renderToday() {
-  document.getElementById('state-loading').style.display = 'none';
+  // Use the global state-loading spinner instead of an inline one. Keep
+  // today-wrap (and the other sibling containers) hidden until the fetch
+  // resolves so the Today master view appears all at once, not piecemeal.
+  document.getElementById('state-loading').style.display = 'block';
   document.getElementById('state-error').style.display   = 'none';
   document.getElementById('state-empty').style.display   = 'none';
   document.getElementById('data-table').style.display    = 'none';
+  document.getElementById('today-wrap').style.display    = 'none';
+  document.getElementById('onboarding-wrap').style.display = 'none';
   const wrap = document.getElementById('today-wrap');
-  wrap.style.display = 'block';
-
-  // Loading state
-  wrap.innerHTML = `
-    <div class="today-header">${esc(new Date().toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'}))}</div>
-    <div class="today-section">
-      <div style="text-align:center;padding:40px;color:var(--text-muted);font-size:13px">
-        <div class="spinner" style="display:inline-block;width:18px;height:18px;vertical-align:middle;margin-right:10px"></div>
-        Loading today's calls from GHL Calendar…
-      </div>
-    </div>
-  `;
 
   try {
     const res = await fetch(SCRIPT_URL + '?action=getTodayCalls');
@@ -2323,14 +2378,16 @@ async function renderToday() {
 
     __todayCache = { events: json.data.events || [], fetchedAt: Date.now(), error: null };
 
+    // Fetch resolved — fill the wrap, then reveal it together with the loading state down.
     if (json.data.setupNeeded) {
       renderTodaySetupRequired(wrap, json.data.calendars || []);
       document.getElementById('today-count').textContent = '⚙';
-      return;
+    } else {
+      renderTodayContent(wrap, json.data.events || []);
+      document.getElementById('today-count').textContent = (json.data.events || []).length;
     }
-
-    renderTodayContent(wrap, json.data.events || []);
-    document.getElementById('today-count').textContent = (json.data.events || []).length;
+    document.getElementById('state-loading').style.display = 'none';
+    wrap.style.display = 'block';
 
   } catch(err) {
     __todayCache.error = err.message;
@@ -2343,6 +2400,8 @@ async function renderToday() {
       </div>
     `;
     document.getElementById('today-count').textContent = '!';
+    document.getElementById('state-loading').style.display = 'none';
+    wrap.style.display = 'block';
   }
 }
 
@@ -2426,8 +2485,9 @@ function renderTodayContent(wrap, events) {
 
   wrap.innerHTML = `
     <div class="today-header">${esc(dateLabel)}</div>
-    ${obSection('calls-today-master', '📞 Calls Today', totalCalls, '', callsInner)}
-    <div class="day-actions-master-header" id="day-actions-master-header">
+    ${obSection('calls-today-master', '📞 Calls Today', totalCalls, '', callsInner, true /* defaultCollapsed */)}
+    <div class="day-actions-master-header" id="day-actions-master-header" onclick="toggleDayActions()">
+      <span class="day-actions-master-chevron">▼</span>
       <span class="day-actions-master-emoji">⚡</span>
       <span class="day-actions-master-title">Day Actions Today</span>
     </div>
