@@ -1248,7 +1248,7 @@
 
       <!-- Outreach actions (contextual based on stage) -->
       <div id="outreach-section"></div>
-      <div class="action-saved" id="action-saved">✓ Action recorded</div>
+      <div class="action-saved" id="action-saved">✓ Stage updated. Add notes if needed, then close when done.</div>
 
       <!-- Reschedule (Fase 3) — visible when stage is Cancelled/No Show -->
       <div id="reschedule-section"></div>
@@ -4885,7 +4885,32 @@ function renderNotes(notes, loading) {
 
 function closeModal() {
   document.getElementById('overlay').classList.remove('open');
+  // If something changed inside the modal while it was open, reload data in
+  // the background so the rest of the dashboard reflects the new state.
+  if (__modalDirty) {
+    __modalDirty = false;
+    loadData();
+  }
   activeContact = null;
+}
+
+// Re-renders the stage-dependent parts of the modal in place. Used after a
+// stage change so the user can keep adding notes without reopening the modal.
+let __modalDirty = false;
+function refreshModalContent(p) {
+  if (!p) return;
+  const st = STAGE_STYLE[p.stageName] || {bg:'#f1f5f9',text:'#475569',dot:'#94a3b8'};
+  document.getElementById('m-stage').innerHTML =
+    `<span class="stage-badge" style="background:${st.bg};color:${st.text}">
+      <span class="stage-dot" style="background:${st.dot}"></span>${esc(p.stageName)}</span>`;
+  document.getElementById('m-time').textContent = fmtDuration(p.stageAgeMs);
+  renderManualBookingSection(p);
+  renderRefundSection(p);
+  renderOutreachSection(p);
+  renderRescheduleSection(p);
+  renderFollowUpSection(p);
+  renderInactiveSection(p);
+  __modalDirty = true;
 }
 
 function onOverlayClick(e) {
@@ -5064,9 +5089,11 @@ async function markEvent(column) {
   renderFilters();
   renderTable();
 
+  // Keep the modal open so the user can add notes after the stage change.
+  // Refresh the in-modal stage-dependent sections so the new state is visible.
+  refreshModalContent(target);
   document.getElementById('action-saved').style.display = 'block';
-  setTimeout(() => { document.getElementById('action-saved').style.display = 'none'; }, 1500);
-  closeModal();
+  setTimeout(() => { document.getElementById('action-saved').style.display = 'none'; }, 4000);
 
   // ── Send to backend (no reload — change already visible) ────
   try {
@@ -5094,6 +5121,7 @@ async function markEvent(column) {
     renderStats();
     renderFilters();
     renderTable();
+    refreshModalContent(target);
     alert('Could not save action: ' + err.message);
   }
 }
