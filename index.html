@@ -1253,6 +1253,9 @@
       <!-- Reschedule (Fase 3) — visible when stage is Cancelled/No Show -->
       <div id="reschedule-section"></div>
 
+      <!-- Book Discovery Call — visible when stage is CC - Scheduled (Deniz books during the CC) -->
+      <div id="book-dc-section"></div>
+
       <!-- Book Follow-Up — visible when stage is DC Scheduled and FU calendar configured -->
       <div id="followup-section"></div>
 
@@ -4001,6 +4004,7 @@ async function openModal(emailOrId) {
   renderRefundSection(p);
   renderOutreachSection(p);
   renderRescheduleSection(p);
+  renderBookDcSection(p);
   renderFollowUpSection(p);
   renderInactiveSection(p);
 
@@ -4674,6 +4678,157 @@ async function confirmFollowUp() {
   }
 }
 
+// ── Book Discovery Call inline (during the Clarity Call) ─────
+// When the participant is on stage CC - Scheduled, Deniz can lock in the
+// DC right from the participant modal without switching tabs to GHL.
+let __bookDcState = { open: false, date: null, slot: null };
+
+function renderBookDcSection(p) {
+  const wrap = document.getElementById('book-dc-section');
+  if (!wrap) return;
+  __bookDcState = { open: false, date: null, slot: null };
+
+  const stage = p.stageName || '';
+  // Show only when the participant has a CC scheduled and isn't refunded/inactive
+  if (stage !== 'CC - Scheduled' || p.isRefunded || p.isInactive) {
+    wrap.innerHTML = '';
+    return;
+  }
+
+  wrap.innerHTML = `
+    <div class="resched-section">
+      <div class="resched-title" style="color:#166534">Book Discovery Call</div>
+      <button class="resched-btn" style="background:#dcfce7;color:#166534;border-color:#86efac" onclick="toggleBookDc()">📅 Book DC now</button>
+      <div id="book-dc-panel-wrap"></div>
+    </div>
+  `;
+}
+
+function toggleBookDc() {
+  __bookDcState.open = !__bookDcState.open;
+  if (__bookDcState.open) {
+    openBookDcPanel();
+  } else {
+    document.getElementById('book-dc-panel-wrap').innerHTML = '';
+  }
+}
+
+function openBookDcPanel() {
+  const wrap = document.getElementById('book-dc-panel-wrap');
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  const defaultDate = tomorrow.toISOString().slice(0,10);
+  __bookDcState.date = defaultDate;
+
+  wrap.innerHTML = `
+    <div class="resched-panel">
+      <label>Date</label>
+      <input type="date" id="book-dc-date" value="${defaultDate}"
+        min="${new Date().toISOString().slice(0,10)}"
+        onchange="onBookDcDateChange(this.value)">
+      <label>Available slots (Discovery Call calendar)</label>
+      <div id="book-dc-slots">
+        <div style="font-size:12px;color:var(--text-muted);padding:10px 0">
+          <div class="spinner" style="display:inline-block;width:12px;height:12px;vertical-align:middle;margin-right:6px"></div>
+          Loading slots…
+        </div>
+      </div>
+      <button class="resched-confirm" id="book-dc-confirm-btn" disabled onclick="confirmBookDc()" style="background:#16a34a">
+        Pick a slot to continue
+      </button>
+      <div id="book-dc-status"></div>
+    </div>
+  `;
+  loadBookDcSlots(defaultDate);
+}
+
+function onBookDcDateChange(date) {
+  __bookDcState.date = date;
+  __bookDcState.slot = null;
+  document.getElementById('book-dc-confirm-btn').disabled = true;
+  document.getElementById('book-dc-confirm-btn').textContent = 'Pick a slot to continue';
+  loadBookDcSlots(date);
+}
+
+async function loadBookDcSlots(date) {
+  const slotsEl = document.getElementById('book-dc-slots');
+  slotsEl.innerHTML = `
+    <div style="font-size:12px;color:var(--text-muted);padding:10px 0">
+      <div class="spinner" style="display:inline-block;width:12px;height:12px;vertical-align:middle;margin-right:6px"></div>
+      Loading slots…
+    </div>
+  `;
+  try {
+    const url = SCRIPT_URL + '?action=getFreeSlots&callType=DC&date=' + encodeURIComponent(date);
+    const res = await fetch(url);
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Failed to load slots');
+    const slots = json.data.slots || [];
+    if (slots.length === 0) {
+      slotsEl.innerHTML = `<div style="font-size:12px;color:var(--text-muted);padding:10px 0">No available slots on this date. Try another day.</div>`;
+      return;
+    }
+    slotsEl.innerHTML = `
+      <div class="resched-slot-grid">
+        ${slots.map(s => {
+          const t = new Date(s).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+          return `<div class="resched-slot" data-iso="${esc(s)}" onclick="selectBookDcSlot('${esc(s)}')">${esc(t)}</div>`;
+        }).join('')}
+      </div>
+    `;
+  } catch(err) {
+    slotsEl.innerHTML = `<div style="font-size:12px;color:#991b1b;padding:10px 0">❌ ${esc(err.message)}</div>`;
+  }
+}
+
+function selectBookDcSlot(iso) {
+  __bookDcState.slot = iso;
+  document.querySelectorAll('#book-dc-panel-wrap .resched-slot').forEach(el => {
+    el.classList.toggle('selected', el.dataset.iso === iso);
+  });
+  const btn = document.getElementById('book-dc-confirm-btn');
+  const t = new Date(iso).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+  btn.disabled = false;
+  btn.textContent = 'Book ' + new Date(iso).toLocaleDateString('en-US', {month:'short', day:'numeric'}) + ' at ' + t;
+}
+
+async function confirmBookDc() {
+  if (!__bookDcState.slot || !activeContact) return;
+  const btn = document.getElementById('book-dc-confirm-btn');
+  const statusEl = document.getElementById('book-dc-status');
+  btn.disabled = true;
+  btn.textContent = '⏳ Booking…';
+  statusEl.innerHTML = '';
+
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'bookAppointment',
+        callType: 'DC',
+        email: activeContact.email,
+        firstName: (activeContact.name || '').split(' ')[0] || '',
+        lastName: (activeContact.name || '').split(' ').slice(1).join(' ') || '',
+        startTime: __bookDcState.slot
+      })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Booking failed');
+
+    statusEl.innerHTML = `
+      <div class="resched-status success">
+        ✓ Discovery Call booked. The stage will update to DC - Scheduled on next refresh.
+      </div>
+    `;
+    btn.textContent = '✓ Booked';
+    __modalDirty = true;
+    // Don't auto-close — let Deniz add notes about the CC if he wants
+  } catch(err) {
+    statusEl.innerHTML = `<div class="resched-status error">❌ ${esc(err.message)}</div>`;
+    btn.disabled = false;
+    btn.textContent = 'Retry booking';
+  }
+}
+
 // ── Mark Inactive UI ──────────────────────────────────────
 // Jackie reviews participants on Day 5 of challenge. If a participant
 // hasn't logged into Everfit, OR has logged in but never filled the
@@ -4908,6 +5063,7 @@ function refreshModalContent(p) {
   renderRefundSection(p);
   renderOutreachSection(p);
   renderRescheduleSection(p);
+  renderBookDcSection(p);
   renderFollowUpSection(p);
   renderInactiveSection(p);
   __modalDirty = true;
