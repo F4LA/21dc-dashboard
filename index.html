@@ -730,6 +730,40 @@
       .intake-card-flag { grid-column: 1; }
     }
 
+    /* ── More options (collapsible in participant modal) ───── */
+    /* Wraps the less-frequent actions (Manual Booking Override, Refund,
+       Outreach overrides, Mark Inactive) into a single collapsible group so
+       the modal isn't overwhelming. Defaults to collapsed per modal open. */
+    .more-options {
+      margin: 24px 0;
+      border-top: 1px solid var(--border, #e5e7eb);
+      border-bottom: 1px solid var(--border, #e5e7eb);
+    }
+    .more-options-toggle {
+      width: 100%;
+      background: transparent;
+      border: none;
+      padding: 12px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text-muted, #6b7280);
+      text-align: left;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .more-options-toggle:hover { color: var(--text-primary); }
+    .more-options-chevron {
+      font-size: 10px;
+      color: var(--text-muted);
+      display: inline-block;
+      width: 12px;
+    }
+    .more-options-label { font-weight: 600; }
+    .more-options-body { padding-bottom: 12px; }
+
     /* ── Action Queue cards (inside Actions Today) ─────────── */
     .ob-section {
       margin-bottom: 28px;
@@ -1239,15 +1273,6 @@
         <button class="action-btn action-btn-success" onclick="markEvent('Purchase GC')">Purchase GC</button>
       </div>
 
-      <!-- Manual booking override — visible when Zapier didn't auto-detect a CC/DC booking
-           (e.g., participant booked with a different email than the one in Participants sheet) -->
-      <div id="manual-booking-section"></div>
-
-      <!-- Refund section (always visible) -->
-      <div id="refund-section"></div>
-
-      <!-- Outreach actions (contextual based on stage) -->
-      <div id="outreach-section"></div>
       <div class="action-saved" id="action-saved">✓ Stage updated. Add notes if needed, then close when done.</div>
 
       <!-- Reschedule (Fase 3) — visible when stage is Cancelled/No Show -->
@@ -1259,8 +1284,27 @@
       <!-- Book Follow-Up — visible when stage is DC Scheduled and FU calendar configured -->
       <div id="followup-section"></div>
 
-      <!-- Mark Inactive (Gabi marks unresponsive participants after Day 5) -->
-      <div id="inactive-section"></div>
+      <!-- More options — collapsible group for less frequent actions (overrides, refund, inactive) -->
+      <div class="more-options">
+        <button class="more-options-toggle" onclick="toggleMoreOptions()" type="button">
+          <span class="more-options-chevron" id="more-options-chevron">▶</span>
+          <span class="more-options-label">More options</span>
+        </button>
+        <div class="more-options-body" id="more-options-body" style="display:none">
+          <!-- Manual booking override — visible when Zapier didn't auto-detect a CC/DC booking
+               (e.g., participant booked with a different email than the one in Participants sheet) -->
+          <div id="manual-booking-section"></div>
+
+          <!-- Refund section -->
+          <div id="refund-section"></div>
+
+          <!-- Outreach actions (contextual based on stage) -->
+          <div id="outreach-section"></div>
+
+          <!-- Mark Inactive (Gabi marks unresponsive participants after Day 5) -->
+          <div id="inactive-section"></div>
+        </div>
+      </div>
 
       <!-- Add note -->
       <div class="section-title">Add note</div>
@@ -2572,6 +2616,24 @@ function toggleDayActions() {
   if (onboardingWrap) onboardingWrap.style.display = next ? 'none' : 'block';
   const header = document.getElementById('day-actions-master-header');
   if (header) header.classList.toggle('collapsed', next);
+}
+
+// ── More options collapsible (participant modal) ───────────────
+// Resets to collapsed on every modal open so the user starts with a clean
+// view; expands manually only when an override is needed.
+function toggleMoreOptions() {
+  const body = document.getElementById('more-options-body');
+  const chevron = document.getElementById('more-options-chevron');
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  if (chevron) chevron.textContent = isOpen ? '▶' : '▼';
+}
+function resetMoreOptions() {
+  const body = document.getElementById('more-options-body');
+  const chevron = document.getElementById('more-options-chevron');
+  if (body) body.style.display = 'none';
+  if (chevron) chevron.textContent = '▶';
 }
 
 // ── Owner filter (Today master view) ───────────────────────────
@@ -4028,6 +4090,9 @@ async function openModal(emailOrId) {
   renderBookDcSection(p);
   renderFollowUpSection(p);
   renderInactiveSection(p);
+
+  // Collapse the "More options" group each time a modal opens
+  resetMoreOptions();
 
   document.getElementById('note-input').value = '';
   document.getElementById('note-saved').style.display = 'none';
