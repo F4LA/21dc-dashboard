@@ -2664,6 +2664,32 @@ function applyOwnerFilter() {
   document.querySelectorAll('.owner-filter-pill').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.owner === owner);
   });
+  updateSectionCountsForFilter();
+}
+
+// After a filter change, walks every Today obSection that contains call cards
+// or Action Queue cards and updates its count badge to reflect ONLY the cards
+// the current filter actually shows. Without this, the header would say
+// "Discovery Calls: 2" while the body has 0 visible cards under a filter that
+// hides them. Sections whose cards are a different shape (Onboarding ob-cards,
+// intake cards, etc.) are skipped — their counts come from JS-side filtering
+// already and the badge stays accurate.
+function updateSectionCountsForFilter() {
+  document.querySelectorAll('.ob-section[data-section-key]').forEach(section => {
+    const cards = section.querySelectorAll('.today-card, .aq-card');
+    if (cards.length === 0) return;
+    let visible = 0;
+    cards.forEach(card => {
+      let el = card, hidden = false;
+      while (el && el !== section) {
+        if (getComputedStyle(el).display === 'none') { hidden = true; break; }
+        el = el.parentElement;
+      }
+      if (!hidden) visible++;
+    });
+    const badge = section.querySelector('.ob-section-count');
+    if (badge) badge.textContent = visible;
+  });
 }
 function renderOwnerFilterBar() {
   const cur = getOwnerFilter();
