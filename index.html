@@ -175,6 +175,39 @@
 
     td { padding: 10px 14px; font-size: 13px; vertical-align: middle; }
 
+    /* Cohort section header — only rendered when Participants holds 2+ cohorts
+       (active + incoming) so the user can tell them apart. Outside crossover
+       these rows are not emitted at all, so the Tracker looks like today. */
+    tbody tr.cohort-section-header {
+      cursor: default;
+      background: #f9fafb;
+    }
+    tbody tr.cohort-section-header:hover { background: #f9fafb; }
+    tbody tr.cohort-section-header td {
+      padding: 12px 14px;
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--text-muted);
+      border-top: 2px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr.cohort-section-header.incoming td {
+      background: #fefce8;  /* subtle amber to mark "future" cohort */
+      color: #92400e;
+    }
+
+    /* Tiny cohort badge next to the participant name during crossover. */
+    .cohort-badge {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 10px; font-weight: 600;
+      letter-spacing: 0.04em;
+      background: #fef3c7; color: #92400e;
+      vertical-align: middle;
+    }
+
     /* ── Avatar ──────────────────────────────────────────── */
     .avatar {
       width: 34px; height: 34px; border-radius: 50%;
@@ -1893,6 +1926,15 @@ async function loadData() {
       window.__challengeStartDate = configJson.data.challengeStartDate;
     }
 
+    // Canonical 'YYYY-MM' key + display label for the active cohort. Used to
+    // filter stats top and detect crossover. Both empty until config returns
+    // them (or until Miguel populates Challenge Month) — defensively the UI
+    // treats blank as "no cohort split, show everything as active".
+    if (configJson.success) {
+      window.__activeChallengeMonth = configJson.data.activeChallengeName || '';
+      window.__activeChallengeMonthLabel = configJson.data.activeChallengeMonthLabel || '';
+    }
+
     // Stash challenge costs for the active challenge if Apps Script provided them.
     // Shape: { adCost, affiliateCost, otherCosts, otherNotes }
     if (configJson.success && configJson.data.challengeCosts) {
@@ -2019,8 +2061,20 @@ function computeStageChangedAt(p) {
 }
 
 // ── Stats ─────────────────────────────────────────────────
+// Returns true when this participant belongs to the currently active cohort.
+// Defensive: if either the active month isn't set yet or the participant
+// has no challengeMonth tag (column missing or row not backfilled), the
+// participant is treated as active. That way the dashboard keeps looking
+// exactly like today until Miguel ships the column + backfill.
+function isActiveCohort(p) {
+  const active = window.__activeChallengeMonth;
+  if (!active) return true;
+  if (!p.challengeMonth) return true;
+  return p.challengeMonth === active;
+}
+
 function renderStats() {
-  const d = participants;
+  const d = participants.filter(isActiveCohort);
   const active = d.filter(p => !p.isRefunded);
   const refundedCount = d.length - active.length;
   document.getElementById('s-total').innerHTML =
@@ -2163,7 +2217,23 @@ function renderTrackerTable() {
   if (list.length === 0) { setState('empty'); return; }
   setState('table');
 
-  document.getElementById('tbody').innerHTML = list.map(p => {
+  // Split into active + incoming cohort. Outside crossover (no incoming rows
+  // or active month unknown), the headers and grouping are suppressed and the
+  // table renders as a single flat list — same as before this feature existed.
+  const activeRows = list.filter(isActiveCohort);
+  const incomingRows = list.filter(p => !isActiveCohort(p));
+  const showCohortSections = incomingRows.length > 0;
+  const activeLabel = window.__activeChallengeMonthLabel || 'Active Challenge';
+
+  // Group incoming by their own challengeMonth so multiple future cohorts
+  // (unlikely but possible) each get their own header.
+  const incomingByMonth = {};
+  incomingRows.forEach(p => {
+    const key = p.challengeMonth || 'unknown';
+    (incomingByMonth[key] = incomingByMonth[key] || []).push(p);
+  });
+
+  const renderRow = (p) => {
     const st  = STAGE_STYLE[p.stageName] || {bg:'#f1f5f9',text:'#475569',dot:'#94a3b8'};
     const ini = initials(p.name);
     const clr = nameColor(p.name);
@@ -2179,10 +2249,16 @@ function renderTrackerTable() {
       : '';
     const rowOpacity = (p.isRefunded || p.isInactive) ? 'opacity:0.6' : '';
 
+    // Only show cohort badge during crossover — outside crossover the column
+    // would be empty for everyone, so the badge would only add noise.
+    const cohortBadge = (showCohortSections && p.challengeMonthLabel)
+      ? `<span class="cohort-badge">${esc(shortCohortLabel(p.challengeMonthLabel))}</span>`
+      : '';
+
     return `<tr onclick="openModal('${p.email}')" style="${rowOpacity}">
       <td><div class="avatar" style="background:${clr}">${ini}</div></td>
       <td>
-        <div class="contact-name">${esc(p.name)}</div>
+        <div class="contact-name">${esc(p.name)}${cohortBadge}</div>
         <div class="contact-email">${esc(p.email||'')}</div>
       </td>
       <td class="hide-sm">
@@ -2211,7 +2287,36 @@ function renderTrackerTable() {
           onclick="event.stopPropagation();openModal('${p.email}')">+ Note</button>
       </td>
     </tr>`;
-  }).join('');
+  };
+
+  // Assemble final HTML. Outside crossover (single cohort or no month info),
+  // emit just the flat row list — identical to the pre-feature output.
+  let html;
+  if (!showCohortSections) {
+    html = list.map(renderRow).join('');
+  } else {
+    const sectionHeader = (label, cls, count) =>
+      `<tr class="cohort-section-header ${cls}"><td colspan="7">${esc(label)} · ${count} participant${count === 1 ? '' : 's'}</td></tr>`;
+    const parts = [];
+    parts.push(sectionHeader(activeLabel || 'Active Challenge', 'active', activeRows.length));
+    parts.push(activeRows.map(renderRow).join(''));
+    Object.keys(incomingByMonth).sort().forEach(key => {
+      const group = incomingByMonth[key];
+      const label = (group[0] && group[0].challengeMonthLabel) || 'Incoming';
+      parts.push(sectionHeader('Incoming · ' + label, 'incoming', group.length));
+      parts.push(group.map(renderRow).join(''));
+    });
+    html = parts.join('');
+  }
+  document.getElementById('tbody').innerHTML = html;
+}
+
+// Short display for the cohort badge — "Julio 2026" → "JUL". Used during
+// crossover to mark which cohort a row belongs to without taking up much room.
+function shortCohortLabel(fullLabel) {
+  if (!fullLabel) return '';
+  const first = String(fullLabel).trim().split(/\s+/)[0];
+  return first.slice(0, 3).toUpperCase();
 }
 
 function renderQueueTable() {
