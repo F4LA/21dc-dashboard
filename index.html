@@ -1186,11 +1186,22 @@
 
       <div style="border-top:1px solid var(--border); margin-top:6px; padding-top:14px">
         <div class="settings-row">
+          <label>Active Challenge Month</label>
+          <input type="month" id="settings-active-month" />
+        </div>
+        <div class="settings-footer" style="margin-top:8px">
+          <span style="font-size:11px;color:var(--text-muted)">Which cohort the dashboard treats as active. Set to the month of the challenge currently running.</span>
+          <button class="btn btn-primary btn-sm" onclick="saveActiveMonth()" id="settings-active-month-btn">Save</button>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border); margin-top:6px; padding-top:14px">
+        <div class="settings-row">
           <label>Archive Current Challenge</label>
           <input type="text" id="settings-archive-name" placeholder="e.g. 2026-05" />
         </div>
         <div class="settings-footer" style="margin-top:8px">
-          <span style="font-size:11px;color:var(--text-muted)">Moves Participants → Historical, clears Active.</span>
+          <span style="font-size:11px;color:var(--text-muted)">Moves matching cohort → Historical. Snapshots Active first.</span>
           <button class="btn btn-ghost btn-sm" onclick="archiveChallenge()" id="settings-archive-btn">Archive</button>
         </div>
       </div>
@@ -5632,6 +5643,13 @@ async function openSettings() {
     if (json.success && json.data.challengeStartDate && json.data.challengeStartDate !== '✗ no configurado') {
       document.getElementById('settings-date').value = json.data.challengeStartDate;
     }
+    // Pre-fill the Active Challenge Month input with the current value so
+    // the user can see and adjust it. The backend prefers the explicit
+    // setting (ACTIVE_CHALLENGE_MONTH) over the derived-from-start-date
+    // fallback, so this input is the single source of truth.
+    if (json.success && json.data.activeChallengeName) {
+      document.getElementById('settings-active-month').value = json.data.activeChallengeName;
+    }
     // Pre-fill the archive name with the active cohort key so the user
     // doesn't have to type it (and can't typo it). Falls back gracefully
     // if the config hasn't been populated yet.
@@ -5640,6 +5658,31 @@ async function openSettings() {
     }
   } catch(e) { /* deja el input vacío si falla */ }
   document.getElementById('settings-overlay').classList.add('open');
+}
+
+async function saveActiveMonth() {
+  const month = document.getElementById('settings-active-month').value;
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+    alert('Pick a month (format YYYY-MM).');
+    return;
+  }
+  const btn = document.getElementById('settings-active-month-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'updateActiveChallengeMonth', month: month })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Save failed');
+    btn.textContent = 'Save'; btn.disabled = false;
+    closeSettings();
+    loadData();
+  } catch(err) {
+    btn.textContent = 'Save'; btn.disabled = false;
+    alert('Error: ' + err.message);
+  }
 }
 
 function closeSettings() {
