@@ -581,13 +581,19 @@
     }
     /* Filter hide rules: when the selected owner doesn't include a section's
        owner class, hide that section. Mixed sections (e.g., "owner-gabi
-       owner-bernardo") show for both Gabi and Bernardo. */
+       owner-bernardo" or "owner-deniz owner-joey") show for all listed owners. */
     .main.filter-gabi .owner-deniz:not(.owner-gabi),
-    .main.filter-gabi .owner-bernardo:not(.owner-gabi) { display: none; }
+    .main.filter-gabi .owner-bernardo:not(.owner-gabi),
+    .main.filter-gabi .owner-joey:not(.owner-gabi) { display: none; }
     .main.filter-bernardo .owner-deniz:not(.owner-bernardo),
-    .main.filter-bernardo .owner-gabi:not(.owner-bernardo) { display: none; }
+    .main.filter-bernardo .owner-gabi:not(.owner-bernardo),
+    .main.filter-bernardo .owner-joey:not(.owner-bernardo) { display: none; }
     .main.filter-deniz .owner-gabi:not(.owner-deniz),
-    .main.filter-deniz .owner-bernardo:not(.owner-deniz) { display: none; }
+    .main.filter-deniz .owner-bernardo:not(.owner-deniz),
+    .main.filter-deniz .owner-joey:not(.owner-deniz) { display: none; }
+    .main.filter-joey .owner-gabi:not(.owner-joey),
+    .main.filter-joey .owner-bernardo:not(.owner-joey),
+    .main.filter-joey .owner-deniz:not(.owner-joey) { display: none; }
 
     /* ── Actions Today master header (Today view) ──────────── */
     /* Visually matches the obSection header used by Calls Today so both
@@ -2665,7 +2671,8 @@ function renderOwnerFilterBar() {
     { id: 'all',      label: 'All' },
     { id: 'gabi',     label: 'Gabi' },
     { id: 'bernardo', label: 'Bernardo' },
-    { id: 'deniz',    label: 'Deniz' }
+    { id: 'deniz',    label: 'Deniz' },
+    { id: 'joey',     label: 'Joey' }
   ];
   return `
     <div class="owner-filter-bar">
@@ -2797,22 +2804,32 @@ function renderTodayContent(wrap, events) {
   // call types as collapsible sub-sections inside it. Uses obSection() for
   // collapse + localStorage persistence (same machinery as Onboarding).
   // All sub-sections default to collapsed — user expands the ones they want.
+  // Owner-class wrappers per sub-section:
+  //   - CC is Deniz-only (he's the sole CC closer) → owner-deniz.
+  //   - DC/FU mix Deniz and Joey assignments → owner-deniz owner-joey on the
+  //     section, with each card carrying its own owner class for fine filtering.
   const callsInner = `
-    ${obSection('calls-cc', 'Clarity Calls today', cc.length,
-      'Real call times from GHL Calendar. Click any card to open the participant.',
-      renderList(cc), true /* defaultCollapsed */)}
-    ${obSection('calls-dc', 'Discovery Calls today', dc.length,
-      'Real call times from GHL Calendar. Click any card to open the participant.',
-      renderList(dc), true /* defaultCollapsed */)}
-    ${obSection('calls-fu', 'Follow-Up Calls today', fu.length,
-      'Second/third conversations after the initial DC. Outcome buttons live in the participant modal.',
-      renderList(fu), true /* defaultCollapsed */)}
+    <div class="owner-deniz">
+      ${obSection('calls-cc', 'Clarity Calls today', cc.length,
+        'Real call times from GHL Calendar. Click any card to open the participant.',
+        renderList(cc), true /* defaultCollapsed */)}
+    </div>
+    <div class="owner-deniz owner-joey">
+      ${obSection('calls-dc', 'Discovery Calls today', dc.length,
+        'Real call times from GHL Calendar. Click any card to open the participant.',
+        renderList(dc), true /* defaultCollapsed */)}
+    </div>
+    <div class="owner-deniz owner-joey">
+      ${obSection('calls-fu', 'Follow-Up Calls today', fu.length,
+        'Second/third conversations after the initial DC. Outcome buttons live in the participant modal.',
+        renderList(fu), true /* defaultCollapsed */)}
+    </div>
   `;
 
   wrap.innerHTML = `
     ${renderOwnerFilterBar()}
     <div class="today-header">${esc(dateLabel)}</div>
-    <div class="owner-deniz">
+    <div class="owner-deniz owner-joey">
       ${obSection('calls-today-master', '📞 Calls Today', totalCalls, '', callsInner, true /* defaultCollapsed */)}
     </div>
     <div class="day-actions-master-header" id="day-actions-master-header" onclick="toggleDayActions()">
@@ -2821,6 +2838,16 @@ function renderTodayContent(wrap, events) {
       <span class="day-actions-master-title">Actions Today</span>
     </div>
   `;
+}
+
+// Maps an assignedUserName (from a GHL event) to the owner CSS class used by
+// the Today filter. Joey gets his own bucket; anyone else (incl. Deniz, blank,
+// or future closers) defaults to Deniz so calls never silently disappear.
+function ownerClassFromAssignedUser(name) {
+  if (!name) return 'owner-deniz';
+  const first = String(name).trim().split(/\s+/)[0].toLowerCase();
+  if (first === 'joey') return 'owner-joey';
+  return 'owner-deniz';
 }
 
 function renderTodayEventCard(ev) {
@@ -2876,8 +2903,11 @@ function renderTodayEventCard(ev) {
 
   const externalPanelHost = !matched ? `<div class="external-panel-host" id="ext-panel-${esc(ev.eventId || email)}"></div>` : '';
 
+  // CC is always Deniz; DC/FU resolved per event.assignedUserName.
+  const ownerCls = ev.callType === 'CC' ? 'owner-deniz' : ownerClassFromAssignedUser(ev.assignedUserName);
+
   return `
-    <div>
+    <div class="${ownerCls}">
       <div class="today-card ${cardClass}" ${clickAction}>
         <div class="avatar" style="background:${clr}">${ini}</div>
         <div class="today-card-info">
@@ -3048,10 +3078,21 @@ function renderActionQueueSection() {
     'action-queue',
     'Action Queue',
     queue.length,
-    `Outreach actions that need to happen — for Deniz (CC/DC reschedule cadence) and Bernardo (Day 4 calls).`,
+    `Reschedule cadence and follow-ups owned by whichever closer handled the original DC (Deniz or Joey). CC items always belong to Deniz.`,
     body,
     true /* defaultCollapsed */
   );
+}
+
+// Returns owner class for an Action Queue item.
+// - CC-related stages → Deniz (he's the only CC closer).
+// - DC-related and post-DC stages → the closer of the participant's last DC
+//   (per Bernardo's rule: "whoever owned the DC owns everything downstream").
+// - Fallback when no DC history exists → Deniz.
+function ownerClassForActionQueueItem(p) {
+  const stage = (p.stageName || '').toUpperCase();
+  if (stage.indexOf('CC') === 0) return 'owner-deniz';
+  return ownerClassFromAssignedUser(p.lastDcAssignedUserName);
 }
 
 function renderActionQueueCard({ p, action }) {
@@ -3061,7 +3102,9 @@ function renderActionQueueCard({ p, action }) {
   const timeClass = p.stageAgeMs > 72*3600000 ? 'danger'
                   : p.stageAgeMs > 48*3600000 ? 'warn' : '';
   const lastNote = p.lastNote;
+  const ownerCls = ownerClassForActionQueueItem(p);
   return `
+   <div class="${ownerCls}">
     <div class="aq-card" onclick="openModal('${esc(p.email)}')">
       <div class="aq-card-identity">
         <div class="avatar" style="background:${clr}">${ini}</div>
@@ -3091,6 +3134,7 @@ function renderActionQueueCard({ p, action }) {
           onclick="event.stopPropagation();openModal('${esc(p.email)}')">+ Note</button>
       </div>
     </div>
+   </div>
   `;
 }
 
@@ -3298,11 +3342,12 @@ function renderOnboarding() {
   const actionQueueHtml = (activeView === 'today') ? renderActionQueueSection() : '';
 
   // Each section is wrapped with owner classes used by the Today owner filter.
-  // - "owner-deniz" = Action Queue (reschedule cadence)
+  // - "owner-deniz owner-joey" = Action Queue (mix; per-card owner classes
+  //   further filter individual items by their original DC closer)
   // - "owner-gabi"  = Gabi-only outreach (Login, Welcome, Setup)
   // - "owner-gabi owner-bernardo" = mixed (Intake Form, CC Booking)
   document.getElementById('onboarding-wrap').innerHTML = `
-    <div class="owner-deniz">${actionQueueHtml}</div>
+    <div class="owner-deniz owner-joey">${actionQueueHtml}</div>
 
     <div class="owner-gabi">${obSection('login_reachout', 'Login Reachout', noEverfit.length,
       `Participants who purchased 24h+ ago and haven't logged into Everfit. Send via <strong>email</strong> (not Everfit DM — they can't receive Everfit messages yet).`,
