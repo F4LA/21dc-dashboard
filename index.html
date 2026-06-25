@@ -5632,6 +5632,12 @@ async function openSettings() {
     if (json.success && json.data.challengeStartDate && json.data.challengeStartDate !== '✗ no configurado') {
       document.getElementById('settings-date').value = json.data.challengeStartDate;
     }
+    // Pre-fill the archive name with the active cohort key so the user
+    // doesn't have to type it (and can't typo it). Falls back gracefully
+    // if the config hasn't been populated yet.
+    if (json.success && json.data.activeChallengeName) {
+      document.getElementById('settings-archive-name').value = json.data.activeChallengeName;
+    }
   } catch(e) { /* deja el input vacío si falla */ }
   document.getElementById('settings-overlay').classList.add('open');
 }
@@ -5650,7 +5656,25 @@ async function archiveChallenge() {
     alert('Enter a challenge name (e.g., "2026-05")');
     return;
   }
-  if (!confirm(`Archive current challenge as "${name}"?\n\nThis will:\n• Copy all Participants rows to Historical with Challenge="${name}"\n• Clear the Participants sheet (ready for next challenge)\n\nProceed?`)) return;
+
+  // Count what will actually move vs stay. Defensive: rows without a
+  // Challenge Month tag fall into the "will archive" bucket because the
+  // backend treats untagged as part of the active cohort.
+  const activeKey = window.__activeChallengeMonth || '';
+  const willArchive = participants.filter(p => !p.challengeMonth || p.challengeMonth === activeKey).length;
+  const willPreserve = participants.length - willArchive;
+  const preserveLine = willPreserve > 0
+    ? `\n• ${willPreserve} participants from other cohorts will STAY in Participants`
+    : '';
+
+  if (!confirm(
+      `Archive current challenge as "${name}"?\n\n`
+      + `This will:\n`
+      + `• Snapshot Participants to a backup tab before touching anything\n`
+      + `• Move ${willArchive} participants to Historical with Challenge="${name}"`
+      + preserveLine
+      + `\n\nProceed?`
+    )) return;
 
   const btn = document.getElementById('settings-archive-btn');
   btn.disabled = true; btn.textContent = 'Archiving…';
@@ -5664,7 +5688,13 @@ async function archiveChallenge() {
     const json = await res.json();
     if (!json.success) throw new Error(json.error || 'Archive error');
 
-    alert(`✓ Archived ${json.data.archived} participants to "${name}".\n\nActive sheet cleared. Update Challenge Start Date for the next challenge.`);
+    const preservedLine = json.data.preserved > 0
+      ? `\n${json.data.preserved} participants from other cohorts stayed in Participants.`
+      : '';
+    const backupLine = json.data.backup
+      ? `\n\nBackup tab: "${json.data.backup}" (delete it once you confirm everything looks right).`
+      : '';
+    alert(`✓ Archived ${json.data.archived} participants to "${name}".${preservedLine}${backupLine}`);
     btn.textContent = 'Archive'; btn.disabled = false;
     document.getElementById('settings-archive-name').value = '';
     historicalLoaded = false;
