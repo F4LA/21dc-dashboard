@@ -2659,7 +2659,7 @@ function applyOwnerFilter() {
   const owner = getOwnerFilter();
   const main = document.querySelector('.main');
   if (!main) return;
-  main.classList.remove('filter-all', 'filter-gabi', 'filter-bernardo', 'filter-deniz');
+  main.classList.remove('filter-all', 'filter-gabi', 'filter-bernardo', 'filter-deniz', 'filter-joey');
   main.classList.add('filter-' + owner);
   document.querySelectorAll('.owner-filter-pill').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.owner === owner);
