@@ -3511,8 +3511,11 @@ function renderOnboarding() {
   // Each section is wrapped with owner classes used by the Today owner filter.
   // - "owner-deniz owner-joey" = Action Queue (mix; per-card owner classes
   //   further filter individual items by their original DC closer)
-  // - "owner-gabi"  = Gabi-only outreach (Login, Welcome, Setup)
-  // - "owner-gabi owner-bernardo" = mixed (Intake Form, CC Booking)
+  // - "owner-gabi" = Gabi-only outreach (Login, Welcome, Setup, CC Booking
+  //   Outreach — per Master Decision Log: Jackie/Gabi owns the full Day 2 DM →
+  //   Day 4 Call → Day 19 Offer Doc booking cadence end-to-end)
+  // - "owner-gabi owner-bernardo" = Intake Form only (mixed: Gabi handles
+  //   normal intakes, Bernardo reviews flagged ones)
   document.getElementById('onboarding-wrap').innerHTML = `
     <div class="owner-deniz owner-joey">${actionQueueHtml}</div>
 
@@ -3530,7 +3533,7 @@ function renderOnboarding() {
       `Participants who logged in and still need their training plan and/or calorie targets assigned in Everfit. Check the intake form in Everfit, then assign and mark here. The list stays visible until both are marked — review daily.`,
       setupBody, true /* defaultCollapsed */)}</div>
 
-    <div class="owner-gabi owner-bernardo">${obSection('cc_booking', 'CC Booking Outreach', ccBooking.length,
+    <div class="owner-gabi">${obSection('cc_booking', 'CC Booking Outreach', ccBooking.length,
       `New booking flow: Day 2 DM → Day 4 Call → Day 19 Offer Doc. Each step shows when its scheduled day arrives.`,
       ccBookingBody, true /* defaultCollapsed */)}</div>
   `;
