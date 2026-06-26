@@ -1668,13 +1668,20 @@ function getWelcomeQueue() {
   });
 }
 
-// Setup Tasks queue: logged in, Training and/or Calories not yet assigned
-// List stays visible until BOTH are marked.
+// Setup Tasks queue: logged in, intake submitted, Training and/or Calories
+// not yet assigned. List stays visible until BOTH are marked.
+//
+// Requires the intake form to be submitted before showing here — assigning
+// training and calories without intake data (goals, injuries, restrictions)
+// would be guesswork. While intake is still pending, the participant lives
+// in the Intake Form section instead.
 function getSetupTasksQueue() {
   return participants.filter(p => {
     if (p.isRefunded || p.isInactive) return false;
     const sd = p.sheetData || {};
     if (!isValidLoginDate(sd['Login to Everfit'])) return false;
+    const macroData = (window.__intakeMacroByEmail || {})[(p.email || '').toLowerCase()];
+    if (!macroData || !macroData.intake || !macroData.intake.found) return false;
     const trainingDone = !!sd['Training Assigned'];
     const caloriesDone = !!sd['Calories Assigned'];
     return !(trainingDone && caloriesDone);
@@ -1683,6 +1690,15 @@ function getSetupTasksQueue() {
     const tb = new Date((b.sheetData && b.sheetData['Login to Everfit']) || 0).getTime();
     return ta - tb;
   });
+}
+
+// True when Participants contains 2+ distinct cohorts (crossover period).
+// Used to decide whether to show cohort badges on cards — they only add
+// signal when more than one cohort is present.
+function hasCrossover() {
+  const months = new Set();
+  participants.forEach(p => { if (p.challengeMonth) months.add(p.challengeMonth); });
+  return months.size > 1;
 }
 
 // Intake Form classification helpers.
@@ -1826,7 +1842,12 @@ function getJackieFlags() {
     }
 
     // 2) CC booking flow flags — only for Participant stage, only after Day 2
-    if (p.stageName === 'Participant' && day !== null && day >= 2) {
+    //    AND only for the ACTIVE cohort. `day` is the active challenge's day
+    //    counter (derived from challengeStartDate), so checking against it for
+    //    an incoming-cohort buyer would always report them as ~Day 17+ late
+    //    on the moment they purchased. Their cadence starts when their cohort
+    //    becomes active.
+    if (isActiveCohort(p) && p.stageName === 'Participant' && day !== null && day >= 2) {
       const expected = [
         { col: 'Day 2 DM Sent',         dueDay: 2,  next: 'Day 4 Call' },
         { col: 'Day 4 Call #1',         dueDay: 4,  next: 'Day 19 Offer Doc' },
@@ -3429,12 +3450,15 @@ function renderIntakePendingCard(p) {
   }
   const ini = initials(p.name);
   const clr = nameColor(p.name);
+  const cohortBadge = (hasCrossover() && p.challengeMonthLabel)
+    ? `<span class="cohort-badge">${esc(shortCohortLabel(p.challengeMonthLabel))}</span>`
+    : '';
   return `
     <div class="intake-card pending">
       <div class="intake-card-head">
         <div class="avatar" style="background:${clr}">${ini}</div>
         <div class="intake-card-meta">
-          <div class="intake-card-name">${esc(p.name)}</div>
+          <div class="intake-card-name">${esc(p.name)}${cohortBadge}</div>
           <div class="intake-card-email">${esc(p.email || '')}</div>
         </div>
       </div>
@@ -3566,6 +3590,9 @@ function renderSetupTaskCard(p) {
   const sd  = p.sheetData || {};
   const trainingDone = !!sd['Training Assigned'];
   const caloriesDone = !!sd['Calories Assigned'];
+  const cohortBadge = (hasCrossover() && p.challengeMonthLabel)
+    ? `<span class="cohort-badge">${esc(shortCohortLabel(p.challengeMonthLabel))}</span>`
+    : '';
 
   // Days since login (use validated date — Miguel's automation writes "12/31/1899" as placeholder)
   const loginTs = isValidLoginDate(sd['Login to Everfit']) ? new Date(sd['Login to Everfit']).getTime() : null;
@@ -3584,7 +3611,7 @@ function renderSetupTaskCard(p) {
     <div class="ob-card">
       <div class="avatar" style="background:${clr}">${ini}</div>
       <div class="ob-card-info">
-        <div class="ob-card-name">${esc(p.name)}</div>
+        <div class="ob-card-name">${esc(p.name)}${cohortBadge}</div>
         <div class="ob-card-meta">${esc(p.email || '')}${loginLabel ? ' · ' + esc(loginLabel) : ''}</div>
       </div>
       <div class="ob-actions">
@@ -3601,6 +3628,9 @@ function renderOnboardingCard(p, action) {
   const clr = nameColor(p.name);
   const days = daysSincePurchase(p);
   const daysLabel = days === 0 ? 'today' : days === 1 ? '1 day ago' : `${days} days ago`;
+  const cohortBadge = (hasCrossover() && p.challengeMonthLabel)
+    ? `<span class="cohort-badge">${esc(shortCohortLabel(p.challengeMonthLabel))}</span>`
+    : '';
 
   const copyBtn = action.hasCopy
     ? `<button class="ob-btn ob-btn-primary" onclick="copyOnboardingMessage('${esc(p.email)}', '${action.type}', this)">Copy message</button>`
@@ -3620,7 +3650,7 @@ function renderOnboardingCard(p, action) {
     <div class="ob-card">
       <div class="avatar" style="background:${clr}">${ini}</div>
       <div class="ob-card-info">
-        <div class="ob-card-name">${esc(p.name)}</div>
+        <div class="ob-card-name">${esc(p.name)}${cohortBadge}</div>
         <div class="ob-card-meta">${esc(p.email || '')} · Purchased ${daysLabel} · <strong>${esc(action.label)}</strong></div>
       </div>
       <div class="ob-actions">
@@ -3892,11 +3922,14 @@ function renderAccountability() {
 function renderAccCard({ p, issue, hrs }) {
   const ini = initials(p.name);
   const clr = nameColor(p.name);
+  const cohortBadge = (hasCrossover() && p.challengeMonthLabel)
+    ? `<span class="cohort-badge">${esc(shortCohortLabel(p.challengeMonthLabel))}</span>`
+    : '';
   return `
     <div class="acc-card" onclick="openModal('${p.email}')">
       <div class="avatar" style="background:${clr}">${ini}</div>
       <div class="acc-card-info">
-        <div class="acc-card-name">${esc(p.name)}</div>
+        <div class="acc-card-name">${esc(p.name)}${cohortBadge}</div>
         <div class="acc-card-issue">${esc(issue)}</div>
       </div>
       <div class="acc-card-time">${fmtDuration(hrs * 3600000)}</div>
