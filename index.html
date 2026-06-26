@@ -1621,7 +1621,13 @@ function getCCBookingFlow() {
   if (day === null || day < 2) return [];  // No outreach before Day 2
 
   return participants
-    .filter(p => p.stageName === 'Participant' && !p.isRefunded && !p.isInactive)
+    // The Day 2 / Day 4 / Day 19 cadence is computed from the ACTIVE challenge's
+    // start date, so it only makes sense for participants in that cohort.
+    // Incoming-cohort buyers (their challenge hasn't started) would otherwise
+    // hit this list immediately at "Send Day 2 DM" because the function reads
+    // them as Day 28+ of the active cohort. They'll start appearing here once
+    // their cohort becomes active.
+    .filter(p => isActiveCohort(p) && p.stageName === 'Participant' && !p.isRefunded && !p.isInactive)
     .map(p => {
       const sd = p.sheetData || {};
       let action = null;
