@@ -2790,22 +2790,47 @@ function applyOwnerFilter() {
 // hides them. Sections whose cards are a different shape (Onboarding ob-cards,
 // intake cards, etc.) are skipped — their counts come from JS-side filtering
 // already and the badge stays accurate.
+//
+// Visibility is computed from the owner-class hierarchy directly (NOT from
+// getComputedStyle), so the count is independent of whether the section is
+// currently collapsed. An earlier implementation depended on computed style,
+// which made the count flip between 0 and the real number depending on the
+// collapse state of the section at the moment of the filter apply.
 function updateSectionCountsForFilter() {
+  const filter = getOwnerFilter();
   document.querySelectorAll('.ob-section[data-section-key]').forEach(section => {
     const cards = section.querySelectorAll('.today-card, .aq-card');
     if (cards.length === 0) return;
     let visible = 0;
     cards.forEach(card => {
-      let el = card, hidden = false;
-      while (el && el !== section) {
-        if (getComputedStyle(el).display === 'none') { hidden = true; break; }
-        el = el.parentElement;
-      }
-      if (!hidden) visible++;
+      if (cardVisibleUnderFilter(card, filter)) visible++;
     });
     const badge = section.querySelector('.ob-section-count');
     if (badge) badge.textContent = visible;
   });
+}
+
+// True if this card would render visibly under `filter`, based on owner classes
+// alone. Walks card → body. The card itself sits inside a per-card wrapper
+// (owner-deniz / owner-joey for Today cards and Action Queue items); the
+// containing section sits inside another wrapper that may declare multiple
+// owners (e.g. owner-deniz owner-joey for DC/FU sub-sections). At every
+// owner-* wrapper we encounter, we require the wanted class to be present —
+// any owner-* wrapper missing `owner-${filter}` means the CSS would hide the
+// card under this filter.
+function cardVisibleUnderFilter(card, filter) {
+  if (filter === 'all') return true;
+  const wanted = 'owner-' + filter;
+  const OWNER_CLASSES = ['owner-deniz', 'owner-joey', 'owner-gabi', 'owner-bernardo'];
+  let el = card;
+  while (el && el.nodeType === 1) {
+    const cl = el.classList;
+    if (cl && OWNER_CLASSES.some(c => cl.contains(c)) && !cl.contains(wanted)) {
+      return false;
+    }
+    el = el.parentElement;
+  }
+  return true;
 }
 function renderOwnerFilterBar() {
   const cur = getOwnerFilter();
