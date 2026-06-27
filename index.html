@@ -614,19 +614,29 @@
     }
     /* Filter hide rules: when the selected owner doesn't include a section's
        owner class, hide that section. Mixed sections (e.g., "owner-gabi
-       owner-bernardo" or "owner-deniz owner-joey") show for all listed owners. */
+       owner-bernardo", "owner-deniz owner-joey", "owner-deniz owner-anthony")
+       show for all listed owners. owner-anthony exists for Clarity Calls only;
+       lifecycle ownership (DC/FU and Action Queue) stays on Deniz/Joey. */
     .main.filter-gabi .owner-deniz:not(.owner-gabi),
     .main.filter-gabi .owner-bernardo:not(.owner-gabi),
-    .main.filter-gabi .owner-joey:not(.owner-gabi) { display: none; }
+    .main.filter-gabi .owner-joey:not(.owner-gabi),
+    .main.filter-gabi .owner-anthony:not(.owner-gabi) { display: none; }
     .main.filter-bernardo .owner-deniz:not(.owner-bernardo),
     .main.filter-bernardo .owner-gabi:not(.owner-bernardo),
-    .main.filter-bernardo .owner-joey:not(.owner-bernardo) { display: none; }
+    .main.filter-bernardo .owner-joey:not(.owner-bernardo),
+    .main.filter-bernardo .owner-anthony:not(.owner-bernardo) { display: none; }
     .main.filter-deniz .owner-gabi:not(.owner-deniz),
     .main.filter-deniz .owner-bernardo:not(.owner-deniz),
-    .main.filter-deniz .owner-joey:not(.owner-deniz) { display: none; }
+    .main.filter-deniz .owner-joey:not(.owner-deniz),
+    .main.filter-deniz .owner-anthony:not(.owner-deniz) { display: none; }
     .main.filter-joey .owner-gabi:not(.owner-joey),
     .main.filter-joey .owner-bernardo:not(.owner-joey),
-    .main.filter-joey .owner-deniz:not(.owner-joey) { display: none; }
+    .main.filter-joey .owner-deniz:not(.owner-joey),
+    .main.filter-joey .owner-anthony:not(.owner-joey) { display: none; }
+    .main.filter-anthony .owner-gabi:not(.owner-anthony),
+    .main.filter-anthony .owner-bernardo:not(.owner-anthony),
+    .main.filter-anthony .owner-deniz:not(.owner-anthony),
+    .main.filter-anthony .owner-joey:not(.owner-anthony) { display: none; }
 
     /* ── Actions Today master header (Today view) ──────────── */
     /* Visually matches the obSection header used by Calls Today so both
@@ -1960,7 +1970,7 @@ async function loadData() {
     if (!json.success) throw new Error(json.error || 'Unknown error');
 
     if (configJson.success && configJson.data.challengeStartDate &&
-        configJson.data.challengeStartDate !== '✗ no configurado') {
+        configJson.data.challengeStartDate !== '✗ not configured') {
       window.__challengeStartDate = configJson.data.challengeStartDate;
     }
 
@@ -2349,7 +2359,7 @@ function renderTrackerTable() {
   document.getElementById('tbody').innerHTML = html;
 }
 
-// Short display for the cohort badge — "Julio 2026" → "JUL". Used during
+// Short display for the cohort badge — "July 2026" → "JUL". Used during
 // crossover to mark which cohort a row belongs to without taking up much room.
 function shortCohortLabel(fullLabel) {
   if (!fullLabel) return '';
@@ -2802,7 +2812,7 @@ function applyOwnerFilter() {
   const owner = getOwnerFilter();
   const main = document.querySelector('.main');
   if (!main) return;
-  main.classList.remove('filter-all', 'filter-gabi', 'filter-bernardo', 'filter-deniz', 'filter-joey');
+  main.classList.remove('filter-all', 'filter-gabi', 'filter-bernardo', 'filter-deniz', 'filter-joey', 'filter-anthony');
   main.classList.add('filter-' + owner);
   document.querySelectorAll('.owner-filter-pill').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.owner === owner);
@@ -2866,7 +2876,8 @@ function renderOwnerFilterBar() {
     { id: 'gabi',     label: 'Gabi' },
     { id: 'bernardo', label: 'Bernardo' },
     { id: 'deniz',    label: 'Deniz' },
-    { id: 'joey',     label: 'Joey' }
+    { id: 'joey',     label: 'Joey' },
+    { id: 'anthony',  label: 'Anthony' }
   ];
   return `
     <div class="owner-filter-bar">
@@ -2999,11 +3010,13 @@ function renderTodayContent(wrap, events) {
   // collapse + localStorage persistence (same machinery as Onboarding).
   // All sub-sections default to collapsed — user expands the ones they want.
   // Owner-class wrappers per sub-section:
-  //   - CC is Deniz-only (he's the sole CC closer) → owner-deniz.
-  //   - DC/FU mix Deniz and Joey assignments → owner-deniz owner-joey on the
-  //     section, with each card carrying its own owner class for fine filtering.
+  //   - CC takes Deniz or Anthony (the two CC callers) → owner-deniz
+  //     owner-anthony; each card carries its own owner class for fine filtering.
+  //   - DC/FU take Deniz or Joey (the closers) → owner-deniz owner-joey.
+  //   - The master section must list everyone who could have a call today, so
+  //     it's tagged with all three.
   const callsInner = `
-    <div class="owner-deniz">
+    <div class="owner-deniz owner-anthony">
       ${obSection('calls-cc', 'Clarity Calls today', cc.length,
         'Real call times from GHL Calendar. Click any card to open the participant.',
         renderList(cc), true /* defaultCollapsed */)}
@@ -3023,7 +3036,7 @@ function renderTodayContent(wrap, events) {
   wrap.innerHTML = `
     ${renderOwnerFilterBar()}
     <div class="today-header">${esc(dateLabel)}</div>
-    <div class="owner-deniz owner-joey">
+    <div class="owner-deniz owner-joey owner-anthony">
       ${obSection('calls-today-master', '📞 Calls Today', totalCalls, '', callsInner, true /* defaultCollapsed */)}
     </div>
     <div class="day-actions-master-header" id="day-actions-master-header" onclick="toggleDayActions()">
@@ -3035,12 +3048,24 @@ function renderTodayContent(wrap, events) {
 }
 
 // Maps an assignedUserName (from a GHL event) to the owner CSS class used by
-// the Today filter. Joey gets his own bucket; anyone else (incl. Deniz, blank,
-// or future closers) defaults to Deniz so calls never silently disappear.
+// the Today filter. This is the LIFECYCLE resolver — used for DC/FU cards and
+// Action Queue items. Only closers (Joey, Deniz) belong here; Anthony does
+// Clarity Calls only and must never appear as a lifecycle owner.
 function ownerClassFromAssignedUser(name) {
   if (!name) return 'owner-deniz';
   const first = String(name).trim().split(/\s+/)[0].toLowerCase();
   if (first === 'joey') return 'owner-joey';
+  return 'owner-deniz';
+}
+
+// CC-specific resolver. Anthony was added to the team to take Clarity Calls
+// alongside Deniz. CCs assigned to him get owner-anthony so the Anthony
+// filter shows only his CCs and nothing else. DCs, FUs, and downstream
+// lifecycle outreach stay with Deniz/Joey via ownerClassFromAssignedUser.
+function ownerClassFromCcAssigned(name) {
+  if (!name) return 'owner-deniz';
+  const first = String(name).trim().split(/\s+/)[0].toLowerCase();
+  if (first === 'anthony') return 'owner-anthony';
   return 'owner-deniz';
 }
 
@@ -3097,8 +3122,11 @@ function renderTodayEventCard(ev) {
 
   const externalPanelHost = !matched ? `<div class="external-panel-host" id="ext-panel-${esc(ev.eventId || email)}"></div>` : '';
 
-  // CC is always Deniz; DC/FU resolved per event.assignedUserName.
-  const ownerCls = ev.callType === 'CC' ? 'owner-deniz' : ownerClassFromAssignedUser(ev.assignedUserName);
+  // CC ownership: Deniz or Anthony (per CC-specific resolver). DC/FU use the
+  // lifecycle resolver and only land on Deniz or Joey.
+  const ownerCls = ev.callType === 'CC'
+    ? ownerClassFromCcAssigned(ev.assignedUserName)
+    : ownerClassFromAssignedUser(ev.assignedUserName);
 
   return `
     <div class="${ownerCls}">
@@ -5707,7 +5735,7 @@ async function openSettings() {
   try {
     const res  = await fetch(SCRIPT_URL + '?action=getConfig');
     const json = await res.json();
-    if (json.success && json.data.challengeStartDate && json.data.challengeStartDate !== '✗ no configurado') {
+    if (json.success && json.data.challengeStartDate && json.data.challengeStartDate !== '✗ not configured') {
       document.getElementById('settings-date').value = json.data.challengeStartDate;
     }
     // Pre-fill the Active Challenge Month input with the current value so
