@@ -638,45 +638,6 @@
     .main.filter-anthony .owner-deniz:not(.owner-anthony),
     .main.filter-anthony .owner-joey:not(.owner-anthony) { display: none; }
 
-    /* ── Actions Today master header (Today view) ──────────── */
-    /* Visually matches the obSection header used by Calls Today so both
-       top-level Today sections have the same styling. Click toggles the
-       onboarding-wrap visibility (the body that holds Action Queue + the
-       4 Onboarding sub-sections). */
-    .day-actions-master-header {
-      display: flex; align-items: center; gap: 12px;
-      margin: 28px 0 8px 0;
-      padding: 26px 32px;
-      background: var(--surface, #fff);
-      border: 1px solid var(--border, #e5e7eb);
-      border-radius: 12px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-      cursor: pointer;
-      user-select: none;
-      transition: background 0.15s;
-    }
-    .day-actions-master-header:hover { background: #f3f4f6; }
-    .day-actions-master-chevron {
-      display: inline-flex;
-      align-items: center; justify-content: center;
-      font-size: 12px;
-      color: var(--accent, #5b3def);
-      background: var(--accent-light, #ede9fe);
-      transition: transform 0.2s ease, background 0.15s, color 0.15s;
-      width: 26px; height: 26px;
-      border-radius: 50%;
-      font-weight: 700;
-      flex-shrink: 0;
-    }
-    .day-actions-master-header:hover .day-actions-master-chevron {
-      background: var(--accent, #5b3def);
-      color: white;
-    }
-    .day-actions-master-header.collapsed .day-actions-master-chevron { transform: rotate(-90deg); }
-    .day-actions-master-emoji { font-size: 18px; line-height: 1; }
-    .day-actions-master-title {
-      font-size: 17px; font-weight: 600; color: var(--text-primary);
-    }
 
     /* ── Action Queue cards (inside Actions Today) ─────────── */
     /* Card-based replacement for the legacy data-table queue rendering.
@@ -1279,8 +1240,10 @@
       <tbody id="tbody"></tbody>
     </table>
 
-    <!-- Onboarding view -->
-    <div class="onboarding-wrap" id="onboarding-wrap" style="display:none"></div>
+    <!-- Onboarding content lives INSIDE today-wrap as a nested obSection.
+         renderToday creates #onboarding-wrap inside the Actions Today
+         section, and renderOnboarding fills it. -->
+
 
     <!-- Accountability view -->
     <div class="acc-wrap" id="accountability-wrap" style="display:none"></div>
@@ -1443,9 +1406,10 @@ function setView(view) {
   if (view !== 'tracker') activeFilter = 'all';
   renderFilters();
 
-  // Hide all view containers
+  // Hide all view containers. #onboarding-wrap is no longer a sibling — it
+  // lives inside today-wrap as part of the Actions Today obSection, so hiding
+  // today-wrap is enough.
   document.getElementById('today-wrap').style.display          = 'none';
-  document.getElementById('onboarding-wrap').style.display     = 'none';
   document.getElementById('accountability-wrap').style.display = 'none';
   document.getElementById('analytics-wrap').style.display      = 'none';
   document.getElementById('history-wrap').style.display        = 'none';
@@ -1453,7 +1417,7 @@ function setView(view) {
   // Clear any owner-filter classes left over from a previous Today render.
   // applyOwnerFilter() will restore the correct one if we're entering Today.
   const mainEl = document.querySelector('.main');
-  if (mainEl) mainEl.classList.remove('filter-all', 'filter-gabi', 'filter-bernardo', 'filter-deniz');
+  if (mainEl) mainEl.classList.remove('filter-all', 'filter-gabi', 'filter-bernardo', 'filter-deniz', 'filter-joey', 'filter-anthony');
 
   if (view === 'today') {
     // Today is the master operational view: Calls + Actions Today (Action
@@ -1462,9 +1426,8 @@ function setView(view) {
     // is needed. The data-table stays hidden — it's reserved for Tracker.
     document.getElementById('data-table').style.display = 'none';
     (async () => {
-      await renderToday();   // GHL Calendar fetch + fill today-wrap
-      renderOnboarding();    // fills onboarding-wrap with Action Queue + 4 sub-sections
-      applyDayActionsCollapseState();
+      await renderToday();   // GHL Calendar fetch + fill today-wrap (creates #onboarding-wrap inside)
+      renderOnboarding();    // fills #onboarding-wrap inside the Actions Today section
       applyOwnerFilter();    // re-apply the owner filter after sections render
     })();
   }
@@ -2751,32 +2714,6 @@ function obSection(key, title, count, desc, bodyHtml, defaultCollapsed) {
   `;
 }
 
-// ── Day Actions Today master toggle (collapses Action Queue + Onboarding together)
-// Defaults to collapsed on first visit; user expands it manually if desired.
-function isDayActionsCollapsed() {
-  try {
-    const v = localStorage.getItem('day-actions-collapsed');
-    if (v === null) return true;  // default collapsed
-    return v === '1';
-  } catch(e) { return true; }
-}
-function applyDayActionsCollapseState() {
-  const collapsed = isDayActionsCollapsed();
-  const onboardingWrap = document.getElementById('onboarding-wrap');
-  if (collapsed && onboardingWrap) onboardingWrap.style.display = 'none';
-  const header = document.getElementById('day-actions-master-header');
-  if (header) header.classList.toggle('collapsed', collapsed);
-}
-function toggleDayActions() {
-  const next = !isDayActionsCollapsed();
-  try { localStorage.setItem('day-actions-collapsed', next ? '1' : '0'); }
-  catch(e) {}
-  const onboardingWrap = document.getElementById('onboarding-wrap');
-  if (onboardingWrap) onboardingWrap.style.display = next ? 'none' : 'block';
-  const header = document.getElementById('day-actions-master-header');
-  if (header) header.classList.toggle('collapsed', next);
-}
-
 // ── More options collapsible (participant modal) ───────────────
 // Resets to collapsed on every modal open so the user starts with a clean
 // view; expands manually only when an override is needed.
@@ -2905,7 +2842,8 @@ async function renderToday() {
   document.getElementById('state-empty').style.display   = 'none';
   document.getElementById('data-table').style.display    = 'none';
   document.getElementById('today-wrap').style.display    = 'none';
-  document.getElementById('onboarding-wrap').style.display = 'none';
+  // #onboarding-wrap now lives INSIDE today-wrap, so hiding the parent
+  // hides it too. Don't query it here — it may not exist on first load.
   const wrap = document.getElementById('today-wrap');
 
   try {
@@ -3033,17 +2971,29 @@ function renderTodayContent(wrap, events) {
     </div>
   `;
 
+  // Actions Today is a sibling of Calls Today and renders using the same
+  // obSection pattern so its sub-sections (Action Queue + Onboarding queues)
+  // visually nest inside the parent card, matching Calls Today's layout.
+  // renderOnboarding fills #onboarding-wrap, which now lives INSIDE the
+  // Actions Today obSection body instead of being a separate static element.
+  let actionsCount;
+  try {
+    actionsCount = getActionQueue().length + getOnboardingNoEverfit().length
+                 + getWelcomeQueue().length + getSetupTasksQueue().length
+                 + getCCBookingFlow().length;
+    if (window.__intakeMacroByEmail) {
+      actionsCount += getIntakePending().length + getIntakeReview().length + getIntakeReady().length;
+    }
+  } catch(_) { actionsCount = 0; }
+
   wrap.innerHTML = `
     ${renderOwnerFilterBar()}
     <div class="today-header">${esc(dateLabel)}</div>
     <div class="owner-deniz owner-joey owner-anthony">
       ${obSection('calls-today-master', '📞 Calls Today', totalCalls, '', callsInner, true /* defaultCollapsed */)}
     </div>
-    <div class="day-actions-master-header" id="day-actions-master-header" onclick="toggleDayActions()">
-      <span class="day-actions-master-chevron">▼</span>
-      <span class="day-actions-master-emoji">⚡</span>
-      <span class="day-actions-master-title">Actions Today</span>
-    </div>
+    ${obSection('actions-today-master', '⚡ Actions Today', actionsCount, '',
+      '<div id="onboarding-wrap"></div>', true /* defaultCollapsed */)}
   `;
 }
 
@@ -3566,15 +3516,21 @@ function renderOnboarding() {
   // (none today, but kept defensive), skip the Action Queue prefix.
   const actionQueueHtml = (activeView === 'today') ? renderActionQueueSection() : '';
 
+  // #onboarding-wrap lives inside the Actions Today obSection (created by
+  // renderToday). If renderOnboarding runs before renderToday finishes
+  // (early callers, non-Today views), the element doesn't exist yet — bail
+  // silently rather than throw.
+  const wrap = document.getElementById('onboarding-wrap');
+  if (!wrap) return;
+
   // Each section is wrapped with owner classes used by the Today owner filter.
   // - "owner-deniz owner-joey" = Action Queue (mix; per-card owner classes
   //   further filter individual items by their original DC closer)
-  // - "owner-gabi" = Gabi-only outreach (Login, Welcome, Setup, CC Booking
-  //   Outreach — per Master Decision Log: Jackie/Gabi owns the full Day 2 DM →
-  //   Day 4 Call → Day 19 Offer Doc booking cadence end-to-end)
-  // - "owner-gabi owner-bernardo" = Intake Form only (mixed: Gabi handles
-  //   normal intakes, Bernardo reviews flagged ones)
-  document.getElementById('onboarding-wrap').innerHTML = `
+  // - "owner-gabi" = Gabi-only sections — Login Reachout, Welcome Message,
+  //   Intake Form, Setup Tasks, and CC Booking Outreach. Bernardo doesn't
+  //   work any of these directly; flagged intakes still surface inside the
+  //   Intake Form section's "Need Review" bucket when Gabi opens it.
+  wrap.innerHTML = `
     <div class="owner-deniz owner-joey">${actionQueueHtml}</div>
 
     <div class="owner-gabi">${obSection('login_reachout', 'Login Reachout', noEverfit.length,
@@ -3585,7 +3541,7 @@ function renderOnboarding() {
       `Participants who logged into Everfit and haven't received a Welcome Message yet. Send via <strong>Everfit DM</strong>.`,
       welcomeBody, true /* defaultCollapsed */)}</div>
 
-    <div class="owner-gabi owner-bernardo">${(activeView === 'today') ? renderIntakeFormSection() : ''}</div>
+    <div class="owner-gabi">${(activeView === 'today') ? renderIntakeFormSection() : ''}</div>
 
     <div class="owner-gabi">${obSection('setup_tasks', 'Setup Tasks (Training & Calories)', setup.length,
       `Participants who logged in and still need their training plan and/or calorie targets assigned in Everfit. Check the intake form in Everfit, then assign and mark here. The list stays visible until both are marked — review daily.`,
@@ -3597,9 +3553,10 @@ function renderOnboarding() {
   `;
 
   // If the Today master view is still loading (global state-loading visible),
-  // leave onboarding-wrap hidden — the setView('today') IIFE will reveal it
-  // when the calls fetch resolves. Otherwise reveal it and hide other state
-  // containers (matches the legacy behavior of this function).
+  // leave the loading state untouched — the setView('today') IIFE will swap
+  // it once the calls fetch resolves. Otherwise hide the state containers.
+  // #onboarding-wrap is no longer toggled directly; it lives inside the
+  // Actions Today obSection and is controlled by that section's collapse.
   const stillLoading = activeView === 'today' &&
     document.getElementById('state-loading').style.display === 'block';
   if (stillLoading) return;
@@ -3608,7 +3565,6 @@ function renderOnboarding() {
   document.getElementById('state-error').style.display   = 'none';
   document.getElementById('state-empty').style.display   = 'none';
   document.getElementById('data-table').style.display    = 'none';
-  document.getElementById('onboarding-wrap').style.display = 'block';
 }
 
 // Setup Task card: training + calories buttons in one row.
