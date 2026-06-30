@@ -1728,7 +1728,9 @@ const ACTION_TO_COLUMN = {
   day_19_offer_doc: 'Day 6 Offer Doc Sent',
   welcome_message:  'Welcome Message Sent',
   training:         'Training Assigned',
-  calories:         'Calories Assigned'
+  calories:         'Calories Assigned',
+  intake_reminder_1: 'Intake Reminder 1 Sent',
+  intake_reminder_2: 'Intake Reminder 2 Sent'
 };
 
 // Map action type → message template key (if it has a copyable message)
@@ -2126,12 +2128,17 @@ function renderFilters() {
     return;
   }
 
+  // Chip counts reflect the ACTIVE cohort only. Incoming cohort rows still
+  // render in their own section of the Tracker, but they shouldn't inflate
+  // the "All / No CC / CC Scheduled / …" numbers — those are the operator's
+  // worklist for the challenge currently running.
+  const activeOnly = participants.filter(isActiveCohort);
   document.getElementById('filter-bar').innerHTML = FILTERS.map(f => {
     let count;
-    if (f.refundedOnly)      count = participants.filter(p => p.isRefunded).length;
-    else if (f.inactiveOnly) count = participants.filter(p => p.isInactive && !p.isRefunded).length;
-    else if (f.stages)       count = participants.filter(p => f.stages.includes(p.stageName) && !p.isRefunded && !p.isInactive).length;
-    else                     count = participants.length;
+    if (f.refundedOnly)      count = activeOnly.filter(p => p.isRefunded).length;
+    else if (f.inactiveOnly) count = activeOnly.filter(p => p.isInactive && !p.isRefunded).length;
+    else if (f.stages)       count = activeOnly.filter(p => f.stages.includes(p.stageName) && !p.isRefunded && !p.isInactive).length;
+    else                     count = activeOnly.length;
     if (count === 0 && f.id !== 'all') return '';
     return `<button class="filter-chip${activeFilter===f.id?' active':''}"
       onclick="setFilter('${f.id}')">${f.label}<span class="filter-count">${count}</span></button>`;
@@ -2178,15 +2185,20 @@ function updateSortHeaders() {
 
 function getFiltered() {
   const f = FILTERS.find(x=>x.id===activeFilter);
+  // Stage-based chips operate on the active cohort only — they're the
+  // operator's worklist for the running challenge. The 'all' chip still
+  // returns every participant so the Incoming section can render below
+  // the Active section in the Tracker.
+  const activeOnly = participants.filter(isActiveCohort);
   let list;
   if (f && f.refundedOnly) {
-    list = participants.filter(p => p.isRefunded);
+    list = activeOnly.filter(p => p.isRefunded);
   } else if (f && f.inactiveOnly) {
-    list = participants.filter(p => p.isInactive && !p.isRefunded);
+    list = activeOnly.filter(p => p.isInactive && !p.isRefunded);
   } else if (f && f.stages) {
-    list = participants.filter(p => f.stages.includes(p.stageName) && !p.isRefunded && !p.isInactive);
+    list = activeOnly.filter(p => f.stages.includes(p.stageName) && !p.isRefunded && !p.isInactive);
   } else {
-    // 'all' filter still includes refunded + inactive so they're visible somewhere by default
+    // 'all' filter still includes refunded + inactive AND the incoming cohort
     list = [...participants];
   }
 
@@ -3408,28 +3420,66 @@ function renderIntakeReviewCard(p) {
   `;
 }
 
+// Intake reminder cadence is gated on what's been MARKED SENT, not just on
+// time since login. Earlier we used hours-since-login alone: at 48h Gabi
+// would see Reminder #2 even if she'd never sent #1 (because she was off
+// that day). Now Reminder #2 only surfaces 24h after Reminder #1 was
+// explicitly marked sent. Sheet columns: 'Intake Reminder 1 Sent' and
+// 'Intake Reminder 2 Sent' track each step.
 function renderIntakePendingCard(p) {
   const sd = p.sheetData || {};
   const loginVal = sd['Login to Everfit'];
-  const hrs = loginVal ? (Date.now() - new Date(loginVal).getTime()) / 3600000 : 0;
-  let status, statusClass, copyType;
-  if (hrs < 24) {
-    status = `Logged in ${Math.round(hrs)}h ago. Wait until 24h before first reminder.`;
-    statusClass = 'soft';
+  const hrsSinceLogin = loginVal ? (Date.now() - new Date(loginVal).getTime()) / 3600000 : 0;
+  const r1Val = sd['Intake Reminder 1 Sent'];
+  const r2Val = sd['Intake Reminder 2 Sent'];
+  const r1Ts  = r1Val ? new Date(r1Val).getTime() : null;
+  const r2Ts  = r2Val ? new Date(r2Val).getTime() : null;
+
+  // Decide which step Gabi is on, and whether the action button should show.
+  let status, statusClass, copyType, actionType;
+  if (r2Ts) {
+    const hrsSince2 = (Date.now() - r2Ts) / 3600000;
+    status = `Reminder #2 sent ${Math.round(hrsSince2)}h ago. Waiting on intake submission.`;
+    statusClass = 'red';
     copyType = null;
-  } else if (hrs < 48) {
-    status = `${Math.round(hrs)}h since login. Send Reminder #1.`;
+    actionType = null;
+  } else if (r1Ts) {
+    const hrsSince1 = (Date.now() - r1Ts) / 3600000;
+    if (hrsSince1 >= 24) {
+      status = `Reminder #1 sent ${Math.round(hrsSince1)}h ago. Send Reminder #2.`;
+      statusClass = 'red';
+      copyType = 'intake_followup_msg2';
+      actionType = 'intake_reminder_2';
+    } else {
+      const hrsLeft = Math.max(0, Math.ceil(24 - hrsSince1));
+      status = `Reminder #1 sent ${Math.round(hrsSince1)}h ago. Wait ${hrsLeft}h before Reminder #2.`;
+      statusClass = 'soft';
+      copyType = null;
+      actionType = null;
+    }
+  } else if (hrsSinceLogin >= 24) {
+    status = `Logged in ${Math.round(hrsSinceLogin)}h ago. Send Reminder #1.`;
     statusClass = 'amber';
     copyType = 'intake_followup_msg1';
+    actionType = 'intake_reminder_1';
   } else {
-    status = `${Math.round(hrs)}h since login. Send Reminder #2.`;
-    statusClass = 'red';
-    copyType = 'intake_followup_msg2';
+    const hrsLeft = Math.max(0, Math.ceil(24 - hrsSinceLogin));
+    status = `Logged in ${Math.round(hrsSinceLogin)}h ago. Wait ${hrsLeft}h before first reminder.`;
+    statusClass = 'soft';
+    copyType = null;
+    actionType = null;
   }
+
   const ini = initials(p.name);
   const clr = nameColor(p.name);
   const cohortBadge = (hasCrossover() && p.challengeMonthLabel)
     ? `<span class="cohort-badge">${esc(shortCohortLabel(p.challengeMonthLabel))}</span>`
+    : '';
+  const copyBtn = copyType
+    ? `<button class="ob-btn ob-btn-primary" onclick="copyIntakeReminder('${esc(p.email)}', '${copyType}', this)">📋 Copy reminder</button>`
+    : '';
+  const markSentBtn = actionType
+    ? `<button class="ob-btn ob-btn-success" onclick="markOnboardingSent('${esc(p.email)}', '${actionType}', this)">Mark sent</button>`
     : '';
   return `
     <div class="intake-card pending">
@@ -3442,7 +3492,8 @@ function renderIntakePendingCard(p) {
       </div>
       <div class="intake-pending-status ${statusClass}">${esc(status)}</div>
       <div class="intake-card-actions">
-        ${copyType ? `<button class="ob-btn ob-btn-primary" onclick="copyIntakeReminder('${esc(p.email)}', '${copyType}', this)">📋 Copy reminder</button>` : ''}
+        ${copyBtn}
+        ${markSentBtn}
         <button class="ob-btn" onclick="openModal('${esc(p.email)}')">Open participant</button>
       </div>
     </div>
@@ -3922,7 +3973,12 @@ function renderAccCard({ p, issue, hrs }) {
 
 // ── Analytics view ────────────────────────────────────────
 function computeFunnel() {
-  const grossTotal = participants.length;
+  // Analytics covers only the active challenge. Incoming cohort participants
+  // haven't started their challenge yet, so their funnel position is
+  // meaningless (they all sit at "Participant" by definition). Including
+  // them would falsely deflate the conversion rates of the running cohort.
+  const activeParticipants = participants.filter(isActiveCohort);
+  const grossTotal = activeParticipants.length;
   let bookedCC = 0, attendedCC = 0, bookedDC = 0, attendedDC = 0;
   let purchase101Count = 0, purchaseGCCount = 0;
   let purchase101Revenue = 0, purchaseGCRevenue = 0;
@@ -3935,7 +3991,7 @@ function computeFunnel() {
                             "Didn't Purchase", 'Purchase 101', 'Purchase GC'];
   const attendedDCStages = ["Didn't Purchase", 'Purchase 101', 'Purchase GC'];
 
-  participants.forEach(p => {
+  activeParticipants.forEach(p => {
     const sd = p.sheetData || {};
     const pkg = parseFloat(sd['$ Package']) || 0;
     challengeRevenueGross += pkg;
