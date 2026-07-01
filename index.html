@@ -1443,6 +1443,7 @@ function setView(view) {
 // Bernardo-sent templates use his first-person voice (he sends them personally).
 const MESSAGE_TEMPLATES = {
   // Sent by EMAIL by Gabi to participants who haven't logged into Everfit
+  // (first reminder, ~24h after purchase)
   login_reachout: (firstName) =>
 `Hi ${firstName},
 
@@ -1461,6 +1462,25 @@ Once you're in, complete the onboarding tasks so you're ready to go. Any trouble
 Excited to have you with us!
 
 The Strong Standard team`,
+
+  // Sent by EMAIL by Gabi 24h after Reminder #1 if the participant still
+  // hasn't logged into Everfit. Shorter, more direct, references the first
+  // email so it doesn't read as a copy-paste.
+  login_reachout_2: (firstName) =>
+`Hi ${firstName},
+
+Just following up on the email we sent a couple of days ago. We have not seen you in Everfit yet, and I wanted to make sure nothing is getting in the way.
+
+Everfit is where you will find everything for the challenge: your workouts, nutrition guidance, coaching calls, and the community. We do not want you to miss out on the daily flow or feel behind as things get started.
+
+Here is your direct access link again:
+[PASTE EVERFIT LINK HERE]
+
+If you are stuck at any point, just reply to this email. We will help you get set up.
+
+Excited to have you in there!
+
+The Strong Standard Team`,
 
   // Sent via Everfit DM by Gabi on Day 2 to non-bookers
   day_2_dm: (firstName) =>
@@ -1563,27 +1583,46 @@ function challengeDayLabel() {
 }
 
 // ── Onboarding filters ────────────────────────────────────
+// Two-tier reminder cadence, mirroring Intake:
+//   Reminder #1 — 24h+ post-purchase, no login yet, and column 'Login Reachout
+//     Sent' is empty → surface with Copy + Mark sent.
+//   Reminder #2 — Reminder #1 was marked sent 24h+ ago, still no login, and
+//     column 'Login Reachout 2 Sent' is empty → surface Reminder #2 (shorter
+//     follow-up copy) with Copy + Mark sent.
+//   After Reminder #2 is marked sent, the participant leaves the queue.
+//     Accountability tab escalates if the participant still hasn't logged in.
+// Returns { p, action } items so renderOnboardingCard can render the right
+// step directly.
 function getOnboardingNoEverfit() {
-  return participants.filter(p => {
-    if (p.isRefunded || p.isInactive) return false;
-    const sd = p.sheetData || {};
-    const purchased = sd['Date Purchased'] || p.createdAt;
-    if (!purchased) return false;
-    const hrsSincePurchase = (Date.now() - new Date(purchased).getTime()) / 3600000;
-    if (hrsSincePurchase < 24) return false;
-    if (isValidLoginDate(sd['Login to Everfit'])) return false;
-    // Once the login reachout has been marked sent, the participant leaves
-    // this queue. If they STILL haven't logged in after Gabi's outreach, the
-    // Accountability tab surfaces them ("Login Reachout stale 48h+"). Re-
-    // nudging them from this queue every 24h was surfacing the same person
-    // over and over even when Gabi had already done her part.
-    if (sd['Login Reachout Sent']) return false;
-    return true;
-  }).sort((a, b) => {
-    const ap = new Date((a.sheetData && a.sheetData['Date Purchased']) || a.createdAt).getTime();
-    const bp = new Date((b.sheetData && b.sheetData['Date Purchased']) || b.createdAt).getTime();
-    return ap - bp;
-  });
+  return participants
+    .filter(p => {
+      if (p.isRefunded || p.isInactive) return false;
+      const sd = p.sheetData || {};
+      const purchased = sd['Date Purchased'] || p.createdAt;
+      if (!purchased) return false;
+      if (isValidLoginDate(sd['Login to Everfit'])) return false;
+      if (sd['Login Reachout 2 Sent']) return false;   // finished the cadence
+      return true;
+    })
+    .map(p => {
+      const sd = p.sheetData || {};
+      const purchased = sd['Date Purchased'] || p.createdAt;
+      const hrsSincePurchase = (Date.now() - new Date(purchased).getTime()) / 3600000;
+      const r1 = sd['Login Reachout Sent'];
+      if (r1) {
+        const hrsSince1 = (Date.now() - new Date(r1).getTime()) / 3600000;
+        if (hrsSince1 < 24) return null;  // still inside the wait window
+        return { p, action: { type: 'login_reachout_2', label: 'Send Reminder #2', hasCopy: true, owner: 'gabi', timeAnchor: 'purchase_date' } };
+      }
+      if (hrsSincePurchase < 24) return null;
+      return { p, action: { type: 'login_reachout_1', label: 'Send Reminder #1', hasCopy: true, owner: 'gabi', timeAnchor: 'purchase_date' } };
+    })
+    .filter(x => x !== null)
+    .sort((a, b) => {
+      const ap = new Date((a.p.sheetData && a.p.sheetData['Date Purchased']) || a.p.createdAt).getTime();
+      const bp = new Date((b.p.sheetData && b.p.sheetData['Date Purchased']) || b.p.createdAt).getTime();
+      return ap - bp;
+    });
 }
 
 // CC Booking flow (new model): Day 2 DM → Day 4 Call → Day 19 Offer Doc
@@ -1594,29 +1633,37 @@ function getCCBookingFlow() {
   const day = currentChallengeDay();
   if (day === null || day < 2) return [];  // No outreach before Day 2
 
+  // Day 2 DM and Day 4 Call only make sense while the participant hasn't
+  // booked a CC yet (stageName === 'Participant'). Day 19 Offer Doc is the
+  // universal last-ditch outreach: it fires for participants still on
+  // 'Participant' AND for those whose CC fell through (Cancelled / No Show)
+  // and never rebooked. That's the "tuvo CC pero no sucedió" bucket.
+  const day19EligibleStages = ['Participant', 'CC - Cancelled', 'CC - No Show'];
+
   return participants
-    // The Day 2 / Day 4 / Day 19 cadence is computed from the ACTIVE challenge's
-    // start date, so it only makes sense for participants in that cohort.
-    // Incoming-cohort buyers (their challenge hasn't started) would otherwise
-    // hit this list immediately at "Send Day 2 DM" because the function reads
-    // them as Day 28+ of the active cohort. They'll start appearing here once
-    // their cohort becomes active.
-    .filter(p => isActiveCohort(p) && p.stageName === 'Participant' && !p.isRefunded && !p.isInactive)
+    .filter(p => isActiveCohort(p) && !p.isRefunded && !p.isInactive)
     .map(p => {
       const sd = p.sheetData || {};
+      const stage = p.stageName;
       let action = null;
 
-      if (!sd['Day 2 DM Sent']) {
-        action = { type: 'day_2_dm',         label: 'Send Day 2 DM',         dayDue: 2,  hasCopy: true };
-      } else if (!sd['Day 4 Call #1']) {
-        // Day 4 Call is run by Bernardo. Copy button gives the no-answer template
-        // for when the participant doesn't pick up — Bernardo sends it via Everfit.
-        action = { type: 'day_4_call',       label: 'Day 4 Call',            dayDue: 4,  hasCopy: true };
-      } else if (!sd['Day 6 Offer Doc Sent']) {
-        action = { type: 'day_19_offer_doc', label: 'Send Day 19 Offer Doc', dayDue: 19, hasCopy: true };
+      // Day 19 Offer Doc — takes precedence if we're past Day 19 and eligible.
+      // Bernardo confirmed: it's the fallback closer for anyone who didn't
+      // reach a purchase decision by the last Friday, whether they never
+      // booked or their CC fell through.
+      if (day >= 19 && day19EligibleStages.indexOf(stage) !== -1 && !sd['Day 6 Offer Doc Sent']) {
+        action = { type: 'day_19_offer_doc', label: 'Send Day 19 Offer Doc', dayDue: 19, hasCopy: true, owner: 'gabi', timeAnchor: 'challenge_day' };
+      } else if (stage === 'Participant') {
+        // Day 2 / Day 4 only for participants who never booked their CC.
+        if (!sd['Day 2 DM Sent']) {
+          action = { type: 'day_2_dm', label: 'Send Day 2 DM', dayDue: 2, hasCopy: true, owner: 'gabi', timeAnchor: 'challenge_day' };
+        } else if (!sd['Day 4 Call #1']) {
+          // Day 4 Call is run by Bernardo (not Gabi). The Copy button gives him
+          // the no-answer template for when the participant doesn't pick up.
+          action = { type: 'day_4_call', label: 'Day 4 Call', dayDue: 4, hasCopy: true, owner: 'bernardo', timeAnchor: 'challenge_day' };
+        }
+        if (action && day < action.dayDue) action = null;
       }
-      // Hide if not yet at the appropriate day
-      if (action && day < action.dayDue) action = null;
       return { p, action };
     })
     .filter(x => x.action !== null)
@@ -1666,13 +1713,20 @@ function getSetupTasksQueue() {
   });
 }
 
-// True when Participants contains 2+ distinct cohorts (crossover period).
-// Used to decide whether to show cohort badges on cards — they only add
-// signal when more than one cohort is present.
+// True when Participants contains anyone from a non-active cohort — either
+// because their challengeMonth is different from the active one, OR because
+// they're tagged with a month and someone else is untagged. Used to decide
+// whether to show cohort badges on cards; badges only add signal when the
+// dashboard is holding mixed cohorts.
+//
+// Earlier version counted only DISTINCT non-empty months. That missed the
+// transition state where new buyers had challengeMonth populated but older
+// active-cohort rows were still untagged — hasCrossover returned false and
+// the badges disappeared right when the operator needed them most.
 function hasCrossover() {
-  const months = new Set();
-  participants.forEach(p => { if (p.challengeMonth) months.add(p.challengeMonth); });
-  return months.size > 1;
+  const active = window.__activeChallengeMonth || '';
+  if (!active) return false;
+  return participants.some(p => p.challengeMonth && p.challengeMonth !== active);
 }
 
 // Intake Form classification helpers.
@@ -1754,14 +1808,19 @@ function getOnboardingCount() {
 // even though the UI now labels them "Day 4 Call" and "Day 19 Offer Doc". This keeps historical
 // data intact without requiring a sheet migration.
 const ACTION_TO_COLUMN = {
-  day_2_dm:         'Day 2 DM Sent',
-  day_4_call:       'Day 4 Call #1',
-  day_19_offer_doc: 'Day 6 Offer Doc Sent',
-  welcome_message:  'Welcome Message Sent',
-  training:         'Training Assigned',
-  calories:         'Calories Assigned',
+  day_2_dm:          'Day 2 DM Sent',
+  day_4_call:        'Day 4 Call #1',
+  day_19_offer_doc:  'Day 6 Offer Doc Sent',
+  welcome_message:   'Welcome Message Sent',
+  training:          'Training Assigned',
+  calories:          'Calories Assigned',
   intake_reminder_1: 'Intake Reminder 1 Sent',
-  intake_reminder_2: 'Intake Reminder 2 Sent'
+  intake_reminder_2: 'Intake Reminder 2 Sent',
+  // Login Reachout is a two-tier cadence like Intake. Reminder #1 keeps
+  // writing to the legacy 'Login Reachout Sent' column so we don't have
+  // to migrate historical data. Reminder #2 writes to a new column.
+  login_reachout_1:  'Login Reachout Sent',
+  login_reachout_2:  'Login Reachout 2 Sent'
 };
 
 // Map action type → message template key (if it has a copyable message)
@@ -1769,7 +1828,9 @@ const ACTION_TO_TEMPLATE = {
   day_2_dm:         'day_2_dm',
   day_4_call:       'day_4_no_answer',   // Bernardo sends if the call didn't connect
   day_19_offer_doc: 'day_19_offer_doc',
-  welcome_message:  'welcome_message'
+  welcome_message:  'welcome_message',
+  login_reachout_1: 'login_reachout',    // first email — full welcome + explain Everfit
+  login_reachout_2: 'login_reachout_2'   // shorter follow-up 24h after #1
 };
 
 // ── Accountability filters ────────────────────────────────
@@ -1829,12 +1890,23 @@ function getJackieFlags() {
     if (!purchased) return;
     const hrsSincePurchase = (Date.now() - new Date(purchased).getTime()) / 3600000;
 
-    // 1) Login Reachout flag — purchased 48h+, no Everfit login, reachout stale or not sent
+    // 1) Login Reachout flag — two-tier cadence. Only flag when the step
+    //    that's due has been overdue for 24h+. Once Reminder #2 is sent the
+    //    ball is in the participant's court, not Gabi's.
     if (hrsSincePurchase >= 48 && !isValidLoginDate(sd['Login to Everfit'])) {
-      const sent = sd['Login Reachout Sent'];
-      const stale = !sent || ((Date.now() - new Date(sent).getTime()) / 3600000) >= 48;
-      if (stale) {
-        flags.push({ p, issue: 'No Everfit login + Login Reachout stale', hrs: hrsSincePurchase });
+      const r1 = sd['Login Reachout Sent'];
+      const r2 = sd['Login Reachout 2 Sent'];
+      if (!r1) {
+        // Reminder #1 should have gone out at hour 24 — flag if we're 24h+
+        // past that mark (48h+ since purchase overall).
+        flags.push({ p, issue: 'Login Reminder #1 not sent (48h+ since purchase)', hrs: hrsSincePurchase });
+      } else if (!r2) {
+        // Reminder #2 becomes due 24h after Reminder #1 — flag if that
+        // window has already been open 24h+.
+        const hrsSinceR1 = (Date.now() - new Date(r1).getTime()) / 3600000;
+        if (hrsSinceR1 >= 48) {
+          flags.push({ p, issue: 'Login Reminder #2 not sent (48h+ since Reminder #1)', hrs: hrsSinceR1 });
+        }
       }
     }
 
@@ -1946,8 +2018,11 @@ function suggestedAction(p) {
 }
 
 function getActionQueue() {
+  // Reschedule cadence only makes sense for the active cohort. An
+  // incoming-cohort buyer who cancels an early-booked CC would otherwise
+  // land here even though the reschedule target lives in their own cohort.
   return participants
-    .filter(p => !p.isRefunded && !p.isInactive)
+    .filter(p => isActiveCohort(p) && !p.isRefunded && !p.isInactive)
     .map(p => ({ p, action: suggestedAction(p) }))
     .filter(x => x.action !== null)
     .sort((a, b) => b.p.stageAgeMs - a.p.stageAgeMs);
@@ -2023,21 +2098,31 @@ async function loadData() {
 }
 
 async function loadIntakeMacroInBackground() {
+  // After the intake fetch resolves, re-run renderOnboarding to fill the
+  // Intake Form / Setup Tasks sub-sections AND applyOwnerFilter so the
+  // Actions Today master badge recomputes with the newly-visible intake
+  // cards. Without the applyOwnerFilter call the master count stays at
+  // whatever renderToday initially wrote (pre-intake), so the badge lags.
+  const finish = () => {
+    if (activeView !== 'today') return;
+    renderOnboarding();
+    applyOwnerFilter();
+  };
   try {
     const res = await fetch(SCRIPT_URL + '?action=getIntakeMacro');
     const json = await res.json();
     if (!json.success) {
       console.warn('Intake/Macro fetch returned error:', json.error);
       window.__intakeMacroByEmail = {};
-      if (activeView === 'today') renderOnboarding();
+      finish();
       return;
     }
     window.__intakeMacroByEmail = json.data || {};
-    if (activeView === 'today') renderOnboarding();
+    finish();
   } catch(err) {
     console.warn('Intake/Macro background load failed:', err);
     window.__intakeMacroByEmail = {};
-    if (activeView === 'today') renderOnboarding();
+    finish();
   }
 }
 
@@ -2125,13 +2210,19 @@ function isActiveCohort(p) {
 }
 
 function renderStats() {
-  const d = participants.filter(isActiveCohort);
-  const active = d.filter(p => !p.isRefunded);
-  const refundedCount = d.length - active.length;
+  // Active cohort only, excluding refunded AND inactive from the stage
+  // counters. Refunded still shows in the "(of N)" gross number so Bernardo
+  // can see the raw cohort size, but inactive participants are treated as
+  // "not on the field" and drop out of every stage counter — matching how
+  // the chip filters and queue functions already handle them.
+  const cohort = participants.filter(isActiveCohort);
+  const notRefunded = cohort.filter(p => !p.isRefunded);
+  const refundedCount = cohort.length - notRefunded.length;
+  const active = notRefunded.filter(p => !p.isInactive);
   document.getElementById('s-total').innerHTML =
     refundedCount > 0
-      ? `${active.length} <span style="font-size:11px;color:var(--text-muted);font-weight:400">(of ${d.length})</span>`
-      : d.length;
+      ? `${notRefunded.length} <span style="font-size:11px;color:var(--text-muted);font-weight:400">(of ${cohort.length})</span>`
+      : cohort.length;
   document.getElementById('s-participant').textContent  = active.filter(p=>p.stageName==='Participant').length;
   document.getElementById('s-cc').textContent           = active.filter(p=>p.stageName==='CC - Scheduled').length;
   document.getElementById('s-dc').textContent           = active.filter(p=>p.stageName==='DC - Scheduled').length;
@@ -2166,17 +2257,20 @@ function renderFilters() {
     return;
   }
 
-  // Chip counts reflect the ACTIVE cohort only. Incoming cohort rows still
-  // render in their own section of the Tracker, but they shouldn't inflate
-  // the "All / No CC / CC Scheduled / …" numbers — those are the operator's
-  // worklist for the challenge currently running.
+  // Stage-based chips reflect the ACTIVE cohort's worklist only. The 'All'
+  // chip is the exception: getFiltered('all') returns EVERY participant
+  // (including incoming, refunded, inactive) so the Tracker can render the
+  // Incoming section beneath the Active section. Its count matches that
+  // rendered list — participants.length — so the number and the visible
+  // rows agree. Refunded/Inactive chips still show active-cohort-scoped
+  // counts because those are what the operator actually works.
   const activeOnly = participants.filter(isActiveCohort);
   document.getElementById('filter-bar').innerHTML = FILTERS.map(f => {
     let count;
     if (f.refundedOnly)      count = activeOnly.filter(p => p.isRefunded).length;
     else if (f.inactiveOnly) count = activeOnly.filter(p => p.isInactive && !p.isRefunded).length;
     else if (f.stages)       count = activeOnly.filter(p => f.stages.includes(p.stageName) && !p.isRefunded && !p.isInactive).length;
-    else                     count = activeOnly.length;
+    else                     count = participants.length;
     if (count === 0 && f.id !== 'all') return '';
     return `<button class="filter-chip${activeFilter===f.id?' active':''}"
       onclick="setFilter('${f.id}')">${f.label}<span class="filter-count">${count}</span></button>`;
@@ -2851,7 +2945,7 @@ function updateSectionCountsForFilter() {
 function cardVisibleUnderFilter(card, filter) {
   if (filter === 'all') return true;
   const wanted = 'owner-' + filter;
-  const OWNER_CLASSES = ['owner-deniz', 'owner-joey', 'owner-gabi', 'owner-bernardo'];
+  const OWNER_CLASSES = ['owner-deniz', 'owner-joey', 'owner-gabi', 'owner-bernardo', 'owner-anthony'];
   let el = card;
   while (el && el.nodeType === 1) {
     const cl = el.classList;
@@ -3269,7 +3363,12 @@ function hasStageAdvancedAfter(p, callType, eventEndMs) {
   const sd = p.sheetData || {};
   let advanceCols;
   if (callType === 'CC') {
-    advanceCols = ['CC Cancelled', 'CC No Show', 'DC Scheduled', 'DC Cancelled', 'DC No Show', 'FU Scheduled', "Didn't Book DC", "Didn't Purchase", 'Purchase 101', 'Purchase GC'];
+    // "Didn't Book DC" is intentionally NOT in this list — it fires days later
+    // when the challenge ends and the participant never scheduled a DC. A CC
+    // card that ended a few hours ago and still hasn't been logged shouldn't
+    // silently flip to "Processed" just because that post-challenge automation
+    // ran. Real CC outcomes are Cancelled, No Show, or DC Scheduled/attended.
+    advanceCols = ['CC Cancelled', 'CC No Show', 'DC Scheduled', 'DC Cancelled', 'DC No Show', 'FU Scheduled', "Didn't Purchase", 'Purchase 101', 'Purchase GC'];
   } else if (callType === 'DC') {
     // After a DC, valid advance signals include: stage outcome OR booking a Follow-Up
     advanceCols = ['DC Cancelled', 'DC No Show', 'FU Scheduled', "Didn't Purchase", 'Purchase 101', 'Purchase GC'];
@@ -3596,7 +3695,7 @@ function renderOnboarding() {
 
   const loginBody = noEverfit.length === 0
     ? `<div class="ob-empty">✨ Everyone is logged into Everfit.</div>`
-    : `<div class="ob-list">${noEverfit.map(p => renderOnboardingCard(p, { type: 'login_reachout', label: 'Login Reachout', hasCopy: true })).join('')}</div>`;
+    : `<div class="ob-list">${noEverfit.map(({ p, action }) => renderOnboardingCard(p, action)).join('')}</div>`;
 
   const welcomeBody = welcome.length === 0
     ? `<div class="ob-empty">✨ All welcomes sent.</div>`
@@ -3642,8 +3741,8 @@ function renderOnboarding() {
       `Participants who logged in and still need their training plan and/or calorie targets assigned in Everfit. Check the intake form in Everfit, then assign and mark here. The list stays visible until both are marked — review daily.`,
       setupBody, true /* defaultCollapsed */)}</div>
 
-    <div class="owner-gabi">${obSection('cc_booking', 'CC Booking Outreach', ccBooking.length,
-      `New booking flow: Day 2 DM → Day 4 Call → Day 19 Offer Doc. Each step shows when its scheduled day arrives.`,
+    <div class="owner-gabi owner-bernardo">${obSection('cc_booking', 'CC Booking Outreach', ccBooking.length,
+      `New booking flow: Day 2 DM (Gabi) → Day 4 Call (Bernardo) → Day 19 Offer Doc (Gabi). Each step shows when its scheduled day arrives. Per-card owner classes route items to the right filter.`,
       ccBookingBody, true /* defaultCollapsed */)}</div>
   `;
 
@@ -3710,15 +3809,27 @@ function renderSetupTaskCard(p) {
 function renderOnboardingCard(p, action) {
   const ini = initials(p.name);
   const clr = nameColor(p.name);
-  // For the Welcome Message stage, what matters is time-since-Everfit-login,
-  // not time-since-purchase — Gabi cares about how long the participant has
-  // been active in the app without a welcome. Login Reachout and the CC
-  // booking cadence stay anchored to Date Purchased.
-  const useLoginDate = action.type === 'welcome_message';
-  const loginDays = useLoginDate ? daysSinceLogin(p) : null;
-  const days = useLoginDate && loginDays !== null ? loginDays : daysSincePurchase(p);
-  const daysLabel = days === 0 ? 'today' : days === 1 ? '1 day ago' : `${days} days ago`;
-  const timeLabel = useLoginDate && loginDays !== null ? `Logged in ${daysLabel}` : `Purchased ${daysLabel}`;
+  // Each card type uses a different clock as its "meaning-of-time-elapsed":
+  //   welcome_message → days since Everfit login (waiting to welcome them in)
+  //   day_2_dm / day_4_call / day_19_offer_doc → current challenge day
+  //   everything else (login reachout) → days since purchase
+  const anchor = action.timeAnchor
+    || (action.type === 'welcome_message' ? 'login_date' : 'purchase_date');
+  let timeLabel = '';
+  if (anchor === 'challenge_day') {
+    const cd = currentChallengeDay();
+    if (cd !== null) timeLabel = `Challenge Day ${cd}`;
+  } else if (anchor === 'login_date') {
+    const ld = daysSinceLogin(p);
+    if (ld !== null) {
+      const l = ld === 0 ? 'today' : ld === 1 ? '1 day ago' : `${ld} days ago`;
+      timeLabel = `Logged in ${l}`;
+    }
+  } else {
+    const dp = daysSincePurchase(p);
+    const l = dp === 0 ? 'today' : dp === 1 ? '1 day ago' : `${dp} days ago`;
+    timeLabel = `Purchased ${l}`;
+  }
   const cohortBadge = (hasCrossover() && p.challengeMonthLabel)
     ? `<span class="cohort-badge">${esc(shortCohortLabel(p.challengeMonthLabel))}</span>`
     : '';
@@ -3727,6 +3838,10 @@ function renderOnboardingCard(p, action) {
     ? `<button class="ob-btn ob-btn-primary" onclick="copyOnboardingMessage('${esc(p.email)}', '${action.type}', this)">Copy message</button>`
     : '';
   const markLabel = action.hasCopy ? 'Mark sent' : 'Mark done';
+  // Owner-class wrapper so per-card CSS filter rules apply. Falls back to
+  // owner-gabi for actions where no explicit owner was declared (login
+  // reachout, welcome message — Gabi's default work).
+  const ownerCls = 'owner-' + (action.owner || 'gabi');
 
   // Day 4 Call gets an extra "Book CC now" button + inline picker — Bernardo
   // can lock in a CC slot while still on the call with the participant.
@@ -3738,19 +3853,21 @@ function renderOnboardingCard(p, action) {
     : '';
 
   return `
-    <div class="ob-card">
-      <div class="avatar" style="background:${clr}">${ini}</div>
-      <div class="ob-card-info">
-        <div class="ob-card-name">${esc(p.name)}${cohortBadge}</div>
-        <div class="ob-card-meta">${esc(p.email || '')} · ${esc(timeLabel)} · <strong>${esc(action.label)}</strong></div>
+    <div class="${ownerCls}">
+      <div class="ob-card">
+        <div class="avatar" style="background:${clr}">${ini}</div>
+        <div class="ob-card-info">
+          <div class="ob-card-name">${esc(p.name)}${cohortBadge}</div>
+          <div class="ob-card-meta">${esc(p.email || '')}${timeLabel ? ' · ' + esc(timeLabel) : ''} · <strong>${esc(action.label)}</strong></div>
+        </div>
+        <div class="ob-actions">
+          ${copyBtn}
+          ${bookCcBtn}
+          <button class="ob-btn ob-btn-success" onclick="markOnboardingSent('${esc(p.email)}', '${action.type}', this)">${markLabel}</button>
+        </div>
       </div>
-      <div class="ob-actions">
-        ${copyBtn}
-        ${bookCcBtn}
-        <button class="ob-btn ob-btn-success" onclick="markOnboardingSent('${esc(p.email)}', '${action.type}', this)">${markLabel}</button>
-      </div>
-    </div>
-    ${bookCcPanel}`;
+      ${bookCcPanel}
+    </div>`;
 }
 
 // CSS-safe id from email
@@ -4057,6 +4174,12 @@ function computeFunnel() {
       refundRevenue += pkg;
       return;   // refunded → don't count in funnel or source breakdown
     }
+    // Inactive participants stay in the cohort's gross count and revenue
+    // math (they paid), but drop out of the operational funnel — otherwise
+    // they inflate bookedCC/attendedCC/bookedDC and the conversion percentages
+    // become wrong. Consistent with how chip filters and queue functions
+    // treat them.
+    if (p.isInactive) return;
 
     if (sd['CC Scheduled']) bookedCC++;
     if (attendedCCStages.includes(p.stageName)) attendedCC++;
