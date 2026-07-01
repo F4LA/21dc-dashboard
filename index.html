@@ -2160,6 +2160,9 @@ async function loadNotesInBackground() {
       p.lastDcAssignedUserId = d.lastDcAssignedUserId || '';
       p.lastDcAssignedUserName = d.lastDcAssignedUserName || '';
     });
+    // Flag consumed by renderActionQueueSection: while false the section
+    // shows a loading placeholder instead of items with wrong owners.
+    window.__lastDcLoaded = true;
     // Re-render whatever the user is looking at so lastNote previews AND
     // Action Queue owner attribution fill in without a manual refresh.
     if (activeView === 'tracker') renderTable();
@@ -3417,21 +3420,31 @@ function hasStageAdvancedAfter(p, callType, eventEndMs) {
 // Tracker fallback paths. In Today view, the Action Queue is rendered
 // here as cards inside Actions Today, sitting next to Login Reachout, etc.
 function renderActionQueueSection() {
-  let queue = getActionQueue();
-  if (searchQuery) {
+  // Owner attribution depends on lastDcAssignedUserName, which arrives via
+  // loadNotesInBackground (the initial lite call skips the slow GHL calendar
+  // lookup). Rendering before that lands would show every item as Deniz,
+  // then re-shuffle to Joey seconds later — Deniz might work items that
+  // weren't his, Joey might see an empty list and leave. Hold the whole
+  // section in a loading state until the merge completes; when it does,
+  // loadNotesInBackground re-runs renderOnboarding and this branch swaps.
+  const lastDcLoaded = !!window.__lastDcLoaded;
+  let queue = lastDcLoaded ? getActionQueue() : [];
+  if (lastDcLoaded && searchQuery) {
     queue = queue.filter(({ p }) => {
       const name = (p.name || '').toLowerCase();
       const email = (p.email || '').toLowerCase();
       return name.includes(searchQuery) || email.includes(searchQuery);
     });
   }
-  const body = queue.length === 0
-    ? `<div class="ob-empty">✨ Nothing to do right now. Everyone is on track.</div>`
-    : `<div class="aq-list">${queue.map(renderActionQueueCard).join('')}</div>`;
+  const body = !lastDcLoaded
+    ? `<div class="ob-empty">⏳ Loading owner assignments…</div>`
+    : queue.length === 0
+      ? `<div class="ob-empty">✨ Nothing to do right now. Everyone is on track.</div>`
+      : `<div class="aq-list">${queue.map(renderActionQueueCard).join('')}</div>`;
   return obSection(
     'action-queue',
     'Action Queue',
-    queue.length,
+    lastDcLoaded ? queue.length : '…',
     `Reschedule cadence and follow-ups owned by whichever closer handled the original DC (Deniz or Joey). CC items always belong to Deniz.`,
     body,
     true /* defaultCollapsed */
