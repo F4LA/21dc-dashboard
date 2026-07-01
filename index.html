@@ -2159,6 +2159,14 @@ async function loadNotesInBackground() {
       p.lastNote = d.lastNote || null;
       p.lastDcAssignedUserId = d.lastDcAssignedUserId || '';
       p.lastDcAssignedUserName = d.lastDcAssignedUserName || '';
+      // Purchase amount + refund flag from the Mastersheet (first invoice
+      // per email). Filled here rather than in the initial lite call so the
+      // page-open path stays fast. Analytics revenue math prefers these
+      // over the almost-always-empty Purchase 101/GC Amount sheet cells.
+      p.purchase101Amount = d.purchase101Amount || 0;
+      p.purchase101Refunded = !!d.purchase101Refunded;
+      p.purchaseGCAmount = d.purchaseGCAmount || 0;
+      p.purchaseGCRefunded = !!d.purchaseGCRefunded;
     });
     // Flag consumed by renderActionQueueSection: while false the section
     // shows a loading placeholder instead of items with wrong owners.
@@ -2430,6 +2438,15 @@ function renderTrackerTable() {
     const inactiveBadge = (!p.isRefunded && p.isInactive)
       ? `<span class="stage-badge" style="background:#f3f4f6;color:#4b5563;margin-left:6px"><span class="stage-dot" style="background:#9ca3af"></span>Inactive</span>`
       : '';
+    // Purchase-specific refunds — flagged by the Mastersheet's Refund column,
+    // separate from the challenge-level p.isRefunded. Shown alongside so the
+    // operator immediately sees WHICH product was refunded.
+    const p101RefundBadge = p.purchase101Refunded
+      ? `<span class="stage-badge" style="background:#fee2e2;color:#991b1b;margin-left:6px" title="1-on-1 purchase refunded"><span class="stage-dot" style="background:#ef4444"></span>1-on-1 refund</span>`
+      : '';
+    const pGCRefundBadge = p.purchaseGCRefunded
+      ? `<span class="stage-badge" style="background:#fee2e2;color:#991b1b;margin-left:6px" title="Group Coaching purchase refunded"><span class="stage-dot" style="background:#ef4444"></span>GC refund</span>`
+      : '';
     const rowOpacity = (p.isRefunded || p.isInactive) ? 'opacity:0.6' : '';
 
     // Only show cohort badge during crossover — outside crossover the column
@@ -2451,6 +2468,8 @@ function renderTrackerTable() {
         </span>
         ${refundBadge}
         ${inactiveBadge}
+        ${p101RefundBadge}
+        ${pGCRefundBadge}
       </td>
       <td><span class="time-cell ${timeClass}">${fmtDuration(p.stageAgeMs)}</span></td>
       <td class="hide-sm">
@@ -4202,6 +4221,8 @@ function computeFunnel() {
   let bookedCC = 0, attendedCC = 0, bookedDC = 0, attendedDC = 0;
   let purchase101Count = 0, purchaseGCCount = 0;
   let purchase101Revenue = 0, purchaseGCRevenue = 0;
+  let purchase101RefundRevenue = 0, purchaseGCRefundRevenue = 0;
+  let purchase101RefundCount = 0, purchaseGCRefundCount = 0;
   let challengeRevenueGross = 0;
   let refundCount = 0, refundRevenue = 0;
   const sourceCount = {};   // { source: count }
@@ -4234,11 +4255,24 @@ function computeFunnel() {
     if (attendedDCStages.includes(p.stageName)) attendedDC++;
     if (sd['Purchase 101']) {
       purchase101Count++;
-      purchase101Revenue += parseFloat(sd['Purchase 101 Amount']) || 0;
+      // Prefer the mastersheet-enriched amount (first invoice per email,
+      // survives renewals); fall back to the sheet cell if the enrichment
+      // hasn't landed yet (cold background load).
+      const p101Amt = parseFloat(p.purchase101Amount) || parseFloat(sd['Purchase 101 Amount']) || 0;
+      purchase101Revenue += p101Amt;
+      if (p.purchase101Refunded) {
+        purchase101RefundCount++;
+        purchase101RefundRevenue += p101Amt;
+      }
     }
     if (sd['Purchase GC']) {
       purchaseGCCount++;
-      purchaseGCRevenue += parseFloat(sd['Purchase GC Amount']) || 0;
+      const pGcAmt = parseFloat(p.purchaseGCAmount) || parseFloat(sd['Purchase GC Amount']) || 0;
+      purchaseGCRevenue += pGcAmt;
+      if (p.purchaseGCRefunded) {
+        purchaseGCRefundCount++;
+        purchaseGCRefundRevenue += pGcAmt;
+      }
     }
 
     // Source breakdown (active participants only)
@@ -4256,7 +4290,9 @@ function computeFunnel() {
   const affiliateCost = parseFloat(costs.affiliateCost) || 0;
   const otherCosts    = parseFloat(costs.otherCosts) || 0;
   const totalCosts    = adCost + affiliateCost + otherCosts;
-  const totalRevenue  = challengeRevenueNet + purchase101Revenue + purchaseGCRevenue;
+  const purchase101RevenueNet = purchase101Revenue - purchase101RefundRevenue;
+  const purchaseGCRevenueNet  = purchaseGCRevenue  - purchaseGCRefundRevenue;
+  const totalRevenue  = challengeRevenueNet + purchase101RevenueNet + purchaseGCRevenueNet;
   const netProfit     = totalRevenue - totalCosts;
 
   // CAC calculations
@@ -4277,7 +4313,13 @@ function computeFunnel() {
     total: netTotal,   // alias for funnel base
     bookedCC, attendedCC, bookedDC, attendedDC, purchased,
     purchase101Count, purchaseGCCount,
+    // Gross figures (before purchase refunds) — kept for backward
+    // compatibility with the Analytics UI. Refund columns are separate so
+    // the UI can render both the gross and the deduction line.
     purchase101Revenue, purchaseGCRevenue,
+    purchase101RefundCount, purchase101RefundRevenue,
+    purchaseGCRefundCount,  purchaseGCRefundRevenue,
+    purchase101RevenueNet, purchaseGCRevenueNet,
     challengeRevenue: challengeRevenueGross,
     challengeRevenueNet,
     totalRevenue,
@@ -4374,6 +4416,14 @@ function renderAnalytics() {
           </div>
           <span class="an-row-value">${fmtMoney(f.purchase101Revenue)}</span>
         </div>
+        ${f.purchase101RefundCount > 0 ? `
+        <div class="an-row">
+          <div>
+            <span class="an-row-label" style="color:#991b1b">1-on-1 refunds</span>
+            <span class="an-row-meta">${f.purchase101RefundCount} refunded</span>
+          </div>
+          <span class="an-row-value" style="color:#991b1b">−${fmtMoney(f.purchase101RefundRevenue)}</span>
+        </div>` : ''}
         <div class="an-row">
           <div>
             <span class="an-row-label">Group Coaching upgrades</span>
@@ -4381,6 +4431,14 @@ function renderAnalytics() {
           </div>
           <span class="an-row-value">${fmtMoney(f.purchaseGCRevenue)}</span>
         </div>
+        ${f.purchaseGCRefundCount > 0 ? `
+        <div class="an-row">
+          <div>
+            <span class="an-row-label" style="color:#991b1b">GC refunds</span>
+            <span class="an-row-meta">${f.purchaseGCRefundCount} refunded</span>
+          </div>
+          <span class="an-row-value" style="color:#991b1b">−${fmtMoney(f.purchaseGCRefundRevenue)}</span>
+        </div>` : ''}
         <div class="an-row an-row-total">
           <span class="an-row-label">Total revenue</span>
           <span class="an-row-value">${fmtMoney(f.totalRevenue)}</span>
