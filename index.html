@@ -2080,6 +2080,13 @@ async function loadData() {
     renderStats();
     renderFilters();
     renderTable();
+    // If the user landed on a view whose renderer doesn't run inside
+    // renderTable() (Analytics, History), fire that renderer now so the
+    // view fills in as soon as data arrives — otherwise it sits on the
+    // zero-state that painted before participants existed.
+    if (activeView === 'analytics') renderAnalytics();
+    else if (activeView === 'history') renderHistory();
+    else if (activeView === 'accountability') renderAccountability();
     document.getElementById('stats-bar').style.display = 'flex';
     document.getElementById('header-meta').textContent =
       'Active challenge · ' + participants.length + ' participants';
