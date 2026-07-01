@@ -1708,7 +1708,37 @@ function getIntakePending() {
     const d = (window.__intakeMacroByEmail || {})[(p.email || '').toLowerCase()];
     // No data fetched yet OR intake form not submitted
     return !d || !d.intake || !d.intake.found;
+  }).sort((a, b) => {
+    // Actionable rows (Send Reminder #1 / #2 now) surface at the top;
+    // waiting rows (still inside the 24h window) sit below them;
+    // Reminder #2 already sent goes last.
+    const pa = intakePendingPriority(a);
+    const pb = intakePendingPriority(b);
+    if (pa !== pb) return pa - pb;
+    // Within the same priority bucket, oldest login first so the most
+    // overdue action gets Gabi's attention first within the actionable block.
+    const la = new Date((a.sheetData && a.sheetData['Login to Everfit']) || 0).getTime();
+    const lb = new Date((b.sheetData && b.sheetData['Login to Everfit']) || 0).getTime();
+    return la - lb;
   });
+}
+
+// Mirrors the state machine in renderIntakePendingCard. Returns 0 for
+// "action needed now" (Copy + Mark sent buttons show), 1 for "waiting on
+// the 24h window", 2 for "Reminder #2 already sent, just waiting on intake
+// submission". Sorting by this value groups the actionable cards at the top.
+function intakePendingPriority(p) {
+  const sd = p.sheetData || {};
+  const loginVal = sd['Login to Everfit'];
+  const hrsSinceLogin = loginVal ? (Date.now() - new Date(loginVal).getTime()) / 3600000 : 0;
+  const r1Ts = sd['Intake Reminder 1 Sent'] ? new Date(sd['Intake Reminder 1 Sent']).getTime() : null;
+  const r2Ts = sd['Intake Reminder 2 Sent'] ? new Date(sd['Intake Reminder 2 Sent']).getTime() : null;
+  if (r2Ts) return 2;
+  if (r1Ts) {
+    const hrsSince1 = (Date.now() - r1Ts) / 3600000;
+    return hrsSince1 >= 24 ? 0 : 1;
+  }
+  return hrsSinceLogin >= 24 ? 0 : 1;
 }
 
 function getOnboardingCount() {
@@ -1863,6 +1893,13 @@ function daysSincePurchase(p) {
   const purchased = sd['Date Purchased'] || p.createdAt;
   if (!purchased) return 0;
   return Math.floor((Date.now() - new Date(purchased).getTime()) / 86400000);
+}
+
+function daysSinceLogin(p) {
+  const sd = p.sheetData || {};
+  const login = sd['Login to Everfit'];
+  if (!isValidLoginDate(login)) return null;
+  return Math.floor((Date.now() - new Date(login).getTime()) / 86400000);
 }
 
 // Suggested action based on stage + time. Returns null if no action needed.
@@ -3661,8 +3698,15 @@ function renderSetupTaskCard(p) {
 function renderOnboardingCard(p, action) {
   const ini = initials(p.name);
   const clr = nameColor(p.name);
-  const days = daysSincePurchase(p);
+  // For the Welcome Message stage, what matters is time-since-Everfit-login,
+  // not time-since-purchase — Gabi cares about how long the participant has
+  // been active in the app without a welcome. Login Reachout and the CC
+  // booking cadence stay anchored to Date Purchased.
+  const useLoginDate = action.type === 'welcome_message';
+  const loginDays = useLoginDate ? daysSinceLogin(p) : null;
+  const days = useLoginDate && loginDays !== null ? loginDays : daysSincePurchase(p);
   const daysLabel = days === 0 ? 'today' : days === 1 ? '1 day ago' : `${days} days ago`;
+  const timeLabel = useLoginDate && loginDays !== null ? `Logged in ${daysLabel}` : `Purchased ${daysLabel}`;
   const cohortBadge = (hasCrossover() && p.challengeMonthLabel)
     ? `<span class="cohort-badge">${esc(shortCohortLabel(p.challengeMonthLabel))}</span>`
     : '';
@@ -3686,7 +3730,7 @@ function renderOnboardingCard(p, action) {
       <div class="avatar" style="background:${clr}">${ini}</div>
       <div class="ob-card-info">
         <div class="ob-card-name">${esc(p.name)}${cohortBadge}</div>
-        <div class="ob-card-meta">${esc(p.email || '')} · Purchased ${daysLabel} · <strong>${esc(action.label)}</strong></div>
+        <div class="ob-card-meta">${esc(p.email || '')} · ${esc(timeLabel)} · <strong>${esc(action.label)}</strong></div>
       </div>
       <div class="ob-actions">
         ${copyBtn}
