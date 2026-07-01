@@ -1572,11 +1572,12 @@ function getOnboardingNoEverfit() {
     const hrsSincePurchase = (Date.now() - new Date(purchased).getTime()) / 3600000;
     if (hrsSincePurchase < 24) return false;
     if (isValidLoginDate(sd['Login to Everfit'])) return false;
-    const sent = sd['Login Reachout Sent'];
-    if (sent) {
-      const hrsSinceSent = (Date.now() - new Date(sent).getTime()) / 3600000;
-      if (hrsSinceSent < 24) return false;
-    }
+    // Once the login reachout has been marked sent, the participant leaves
+    // this queue. If they STILL haven't logged in after Gabi's outreach, the
+    // Accountability tab surfaces them ("Login Reachout stale 48h+"). Re-
+    // nudging them from this queue every 24h was surfacing the same person
+    // over and over even when Gabi had already done her part.
+    if (sd['Login Reachout Sent']) return false;
     return true;
   }).sort((a, b) => {
     const ap = new Date((a.sheetData && a.sheetData['Date Purchased']) || a.createdAt).getTime();
@@ -2822,7 +2823,13 @@ function applyOwnerFilter() {
 function updateSectionCountsForFilter() {
   const filter = getOwnerFilter();
   document.querySelectorAll('.ob-section[data-section-key]').forEach(section => {
-    const cards = section.querySelectorAll('.today-card, .aq-card');
+    // Include every card type this dashboard uses so a section like Actions
+    // Today (which contains Action Queue aq-cards + Onboarding ob-cards +
+    // Intake intake-cards) counts them all. Without .ob-card / .intake-card
+    // in the selector the master badge would only reflect Action Queue and
+    // read "0" under filters where Action Queue is hidden but ob-cards are
+    // visible (Gabi).
+    const cards = section.querySelectorAll('.today-card, .aq-card, .ob-card, .intake-card');
     if (cards.length === 0) return;
     let visible = 0;
     cards.forEach(card => {
@@ -3666,13 +3673,18 @@ function renderSetupTaskCard(p) {
     ? `<span class="cohort-badge">${esc(shortCohortLabel(p.challengeMonthLabel))}</span>`
     : '';
 
-  // Days since login (use validated date — Miguel's automation writes "12/31/1899" as placeholder)
-  const loginTs = isValidLoginDate(sd['Login to Everfit']) ? new Date(sd['Login to Everfit']).getTime() : null;
-  const daysSinceLogin = loginTs ? Math.floor((Date.now() - loginTs) / 86400000) : null;
-  const loginLabel = daysSinceLogin === null ? '' :
-    daysSinceLogin === 0 ? 'Logged in today' :
-    daysSinceLogin === 1 ? 'Logged in 1 day ago' :
-    `Logged in ${daysSinceLogin} days ago`;
+  // At the Setup Tasks stage the meaningful clock is time since intake was
+  // submitted — that's the point where Gabi CAN start assigning training +
+  // calories. Days-since-login was noise here: someone who logged in a week
+  // ago but only submitted intake yesterday isn't "7 days overdue for setup".
+  const intakeData = (window.__intakeMacroByEmail || {})[(p.email || '').toLowerCase()];
+  const intakeSubmittedRaw = intakeData && intakeData.intake && intakeData.intake.submittedAt;
+  const intakeTs = intakeSubmittedRaw ? new Date(intakeSubmittedRaw).getTime() : null;
+  const daysSinceIntake = (intakeTs && !isNaN(intakeTs)) ? Math.floor((Date.now() - intakeTs) / 86400000) : null;
+  const intakeLabel = daysSinceIntake === null ? '' :
+    daysSinceIntake === 0 ? 'Intake submitted today' :
+    daysSinceIntake === 1 ? 'Intake submitted 1 day ago' :
+    `Intake submitted ${daysSinceIntake} days ago`;
 
   const trainingClass = trainingDone ? 'ob-btn ob-btn-success' : 'ob-btn';
   const caloriesClass = caloriesDone ? 'ob-btn ob-btn-success' : 'ob-btn';
@@ -3684,7 +3696,7 @@ function renderSetupTaskCard(p) {
       <div class="avatar" style="background:${clr}">${ini}</div>
       <div class="ob-card-info">
         <div class="ob-card-name">${esc(p.name)}${cohortBadge}</div>
-        <div class="ob-card-meta">${esc(p.email || '')}${loginLabel ? ' · ' + esc(loginLabel) : ''}</div>
+        <div class="ob-card-meta">${esc(p.email || '')}${intakeLabel ? ' · ' + esc(intakeLabel) : ''}</div>
       </div>
       <div class="ob-actions">
         <button class="${trainingClass}" ${trainingDone ? 'disabled' : ''}
