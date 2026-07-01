@@ -2093,11 +2093,13 @@ async function loadData() {
     document.getElementById('last-updated').textContent =
       'Updated ' + new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
 
-    // Notes are now lazy-loaded on modal open (sheet-based participants
-    // don't have a contactId until we look it up by email).
-
-    // Kick off intake + macro fetch in the background. The Today view will
-    // re-render its Intake Form section once the cache is populated.
+    // Kick off both background fetches in parallel. Notes (via
+    // getOpportunities without the lite flag) also brings in
+    // lastDcAssignedUserId/Name — the DC calendar lookup was intentionally
+    // skipped in the lite call to keep first-paint fast. Intake + macros
+    // come from a separate action against the Macro Engine sheet. Neither
+    // blocks the initial render.
+    loadNotesInBackground();
     loadIntakeMacroInBackground();
   } catch(err) {
     setState('error');
@@ -2141,19 +2143,32 @@ async function loadNotesInBackground() {
     const res  = await fetch(SCRIPT_URL + '?action=getOpportunities');
     const json = await res.json();
     if (!json.success) return;
-    // Merge notes into existing participants (preserves any optimistic updates).
+    // Merge by email — contactId is null in both payloads for sheet-sourced
+    // participants, so the prior contactId-based merge was silently dropping
+    // this data. Also brings in lastDcAssignedUserId/Name, which the initial
+    // lite call intentionally skips to keep first-load under 2s.
+    const byEmail = {};
     json.data.forEach(d => {
-      const p = participants.find(x => x.contactId === d.contactId);
-      if (p) {
-        p.allNotes = d.allNotes || [];
-        p.lastNote = d.lastNote || null;
-      }
+      const key = (d.email || '').toLowerCase();
+      if (key) byEmail[key] = d;
     });
-    // Re-render current view to surface lastNote previews.
+    participants.forEach(p => {
+      const d = byEmail[(p.email || '').toLowerCase()];
+      if (!d) return;
+      p.allNotes = d.allNotes || [];
+      p.lastNote = d.lastNote || null;
+      p.lastDcAssignedUserId = d.lastDcAssignedUserId || '';
+      p.lastDcAssignedUserName = d.lastDcAssignedUserName || '';
+    });
+    // Re-render whatever the user is looking at so lastNote previews AND
+    // Action Queue owner attribution fill in without a manual refresh.
     if (activeView === 'tracker') renderTable();
-    else if (activeView === 'today') renderQueueTable();  // Today contains the queue table
+    else if (activeView === 'today') renderOnboarding();
+    else if (activeView === 'analytics') renderAnalytics();
+    else if (activeView === 'history') renderHistory();
+    else if (activeView === 'accountability') renderAccountability();
   } catch(err) {
-    console.warn('Background notes load failed:', err);
+    console.warn('Background full-data load failed:', err);
   }
 }
 
