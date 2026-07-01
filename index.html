@@ -1797,9 +1797,12 @@ function intakePendingPriority(p) {
 }
 
 function getOnboardingCount() {
+  // Setup Tasks section was folded into the Intake Form "Ready to Assign"
+  // bucket (Training / Calories buttons live directly on the ready card).
+  // The ready-to-assign count is added by renderToday's actionsCount when
+  // intake data has loaded, so we don't include it here.
   return getOnboardingNoEverfit().length
        + getWelcomeQueue().length
-       + getSetupTasksQueue().length
        + getCCBookingFlow().length;
 }
 
@@ -3126,11 +3129,13 @@ function renderTodayContent(wrap, events) {
   // visually nest inside the parent card, matching Calls Today's layout.
   // renderOnboarding fills #onboarding-wrap, which now lives INSIDE the
   // Actions Today obSection body instead of being a separate static element.
+  // Setup Tasks was folded into the Intake Ready bucket (buttons moved into
+  // the ready card), so no separate setup count — the intake ready count
+  // covers it once intake data has loaded.
   let actionsCount;
   try {
     actionsCount = getActionQueue().length + getOnboardingNoEverfit().length
-                 + getWelcomeQueue().length + getSetupTasksQueue().length
-                 + getCCBookingFlow().length;
+                 + getWelcomeQueue().length + getCCBookingFlow().length;
     if (window.__intakeMacroByEmail) {
       actionsCount += getIntakePending().length + getIntakeReview().length + getIntakeReady().length;
     }
@@ -3502,7 +3507,7 @@ function renderIntakeFormSection() {
     `;
   }
   return obSection('intake-form', 'Intake Form', total,
-    `Intake form submissions + macros from the Macro Engine. Copy macros into Everfit, then mark Training/Calories in Setup Tasks.`,
+    `Intake form submissions + macros from the Macro Engine. For Ready-to-Assign rows, plug the macros into Everfit and mark Training + Calories Assigned right on the card. Card disappears once both are marked.`,
     body, true /* defaultCollapsed */);
 }
 
@@ -3512,12 +3517,26 @@ function renderIntakeReadyCard(p) {
   const m = d.macro;
   const ini = initials(p.name);
   const clr = nameColor(p.name);
+  const sd = p.sheetData || {};
+  const trainingDone = !!sd['Training Assigned'];
+  const caloriesDone = !!sd['Calories Assigned'];
+  const trainingClass = trainingDone ? 'ob-btn ob-btn-success' : 'ob-btn';
+  const caloriesClass = caloriesDone ? 'ob-btn ob-btn-success' : 'ob-btn';
+  const trainingLabel = trainingDone ? '✓ Training' : 'Training Assigned';
+  const caloriesLabel = caloriesDone ? '✓ Calories' : 'Calories Assigned';
+  const cohortBadge = (hasCrossover() && p.challengeMonthLabel)
+    ? `<span class="cohort-badge">${esc(shortCohortLabel(p.challengeMonthLabel))}</span>`
+    : '';
+  // Ready to Assign is now the single action card for intake work: the
+  // macros are shown for reference, and the Training / Calories Assigned
+  // buttons live right here so Gabi doesn't have to bounce down to a
+  // separate Setup Tasks section. Card disappears when both are marked.
   return `
     <div class="intake-card ready">
       <div class="intake-card-head">
         <div class="avatar" style="background:${clr}">${ini}</div>
         <div class="intake-card-meta">
-          <div class="intake-card-name">${esc(p.name)}</div>
+          <div class="intake-card-name">${esc(p.name)}${cohortBadge}</div>
           <div class="intake-card-email">${esc(p.email || '')}</div>
         </div>
       </div>
@@ -3527,8 +3546,10 @@ function renderIntakeReadyCard(p) {
         <div class="intake-macro-row"><span class="intake-macro-label">Program</span><span class="intake-macro-value">${esc(String(m.program))}</span></div>
       </div>
       <div class="intake-card-actions">
-        <button class="ob-btn ob-btn-primary" onclick="copyMacros('${esc(p.email)}', this)">📋 Copy macros</button>
-        <button class="ob-btn" onclick="openModal('${esc(p.email)}')">Open participant</button>
+        <button class="${trainingClass}" ${trainingDone ? 'disabled' : ''}
+          onclick="markOnboardingSent('${esc(p.email)}', 'training', this)">${trainingLabel}</button>
+        <button class="${caloriesClass}" ${caloriesDone ? 'disabled' : ''}
+          onclick="markOnboardingSent('${esc(p.email)}', 'calories', this)">${caloriesLabel}</button>
       </div>
     </div>
   `;
@@ -3676,7 +3697,6 @@ async function copyIntakeReminder(email, type, btn) {
 function renderOnboarding() {
   const noEverfit  = getOnboardingNoEverfit();
   const welcome    = getWelcomeQueue();
-  const setup      = getSetupTasksQueue();
   const ccBooking  = getCCBookingFlow();
   const day        = currentChallengeDay();
   const dayLabel   = challengeDayLabel();
@@ -3700,10 +3720,6 @@ function renderOnboarding() {
   const welcomeBody = welcome.length === 0
     ? `<div class="ob-empty">✨ All welcomes sent.</div>`
     : `<div class="ob-list">${welcome.map(p => renderOnboardingCard(p, { type: 'welcome_message', label: 'Send Welcome Message', hasCopy: true })).join('')}</div>`;
-
-  const setupBody = setup.length === 0
-    ? `<div class="ob-empty">✨ Everyone is set up.</div>`
-    : `<div class="ob-list">${setup.map(p => renderSetupTaskCard(p)).join('')}</div>`;
 
   // In Today master view, the Action Queue lives as the first obSection
   // (above Login Reachout, Welcome, etc). In legacy onboarding-only paths
@@ -3736,10 +3752,6 @@ function renderOnboarding() {
       welcomeBody, true /* defaultCollapsed */)}</div>
 
     <div class="owner-gabi">${(activeView === 'today') ? renderIntakeFormSection() : ''}</div>
-
-    <div class="owner-gabi">${obSection('setup_tasks', 'Setup Tasks (Training & Calories)', setup.length,
-      `Participants who logged in and still need their training plan and/or calorie targets assigned in Everfit. Check the intake form in Everfit, then assign and mark here. The list stays visible until both are marked — review daily.`,
-      setupBody, true /* defaultCollapsed */)}</div>
 
     <div class="owner-gabi owner-bernardo">${obSection('cc_booking', 'CC Booking Outreach', ccBooking.length,
       `New booking flow: Day 2 DM (Gabi) → Day 4 Call (Bernardo) → Day 19 Offer Doc (Gabi). Each step shows when its scheduled day arrives. Per-card owner classes route items to the right filter.`,
