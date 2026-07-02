@@ -2165,8 +2165,10 @@ async function loadNotesInBackground() {
       // over the almost-always-empty Purchase 101/GC Amount sheet cells.
       p.purchase101Amount = d.purchase101Amount || 0;
       p.purchase101Refunded = !!d.purchase101Refunded;
+      p.purchase101CoachCost = d.purchase101CoachCost || 0;
       p.purchaseGCAmount = d.purchaseGCAmount || 0;
       p.purchaseGCRefunded = !!d.purchaseGCRefunded;
+      p.purchaseGCCoachCost = d.purchaseGCCoachCost || 0;
     });
     // Flag consumed by renderActionQueueSection: while false the section
     // shows a loading placeholder instead of items with wrong owners.
@@ -4223,6 +4225,10 @@ function computeFunnel() {
   let purchase101Revenue = 0, purchaseGCRevenue = 0;
   let purchase101RefundRevenue = 0, purchaseGCRefundRevenue = 0;
   let purchase101RefundCount = 0, purchaseGCRefundCount = 0;
+  // Coach payouts per upgraded client, sourced from the Mastersheet
+  // (monthly-payout × contract-duration). Refunded clients don't cost us
+  // a coach anymore, so their payout gets excluded from the running sum.
+  let coachCost101 = 0, coachCostGC = 0;
   let challengeRevenueGross = 0;
   let refundCount = 0, refundRevenue = 0;
   const sourceCount = {};   // { source: count }
@@ -4263,6 +4269,10 @@ function computeFunnel() {
       if (p.purchase101Refunded) {
         purchase101RefundCount++;
         purchase101RefundRevenue += p101Amt;
+      } else {
+        // Only accrue coach payout for clients we're still paying for.
+        // A refunded client means the contract dissolved.
+        coachCost101 += parseFloat(p.purchase101CoachCost) || 0;
       }
     }
     if (sd['Purchase GC']) {
@@ -4272,6 +4282,8 @@ function computeFunnel() {
       if (p.purchaseGCRefunded) {
         purchaseGCRefundCount++;
         purchaseGCRefundRevenue += pGcAmt;
+      } else {
+        coachCostGC += parseFloat(p.purchaseGCCoachCost) || 0;
       }
     }
 
@@ -4289,7 +4301,8 @@ function computeFunnel() {
   const adCost        = parseFloat(costs.adCost) || 0;
   const affiliateCost = parseFloat(costs.affiliateCost) || 0;
   const otherCosts    = parseFloat(costs.otherCosts) || 0;
-  const totalCosts    = adCost + affiliateCost + otherCosts;
+  const totalCoachCost = coachCost101 + coachCostGC;
+  const totalCosts    = adCost + affiliateCost + otherCosts + totalCoachCost;
   const purchase101RevenueNet = purchase101Revenue - purchase101RefundRevenue;
   const purchaseGCRevenueNet  = purchaseGCRevenue  - purchaseGCRefundRevenue;
   const totalRevenue  = challengeRevenueNet + purchase101RevenueNet + purchaseGCRevenueNet;
@@ -4326,6 +4339,7 @@ function computeFunnel() {
     sourceCount,
     // Costs + profit
     adCost, affiliateCost, otherCosts, totalCosts, netProfit,
+    coachCost101, coachCostGC, totalCoachCost,
     otherNotes: costs.otherNotes || '',
     // CAC
     blendedCAC, paidAdsCAC, paidParticipants
@@ -4467,6 +4481,22 @@ function renderAnalytics() {
             ${f.otherNotes ? `<span class="an-row-meta">${esc(f.otherNotes)}</span>` : ''}
           </div>
           <span class="an-row-value" style="color:#991b1b">−${fmtMoney(f.otherCosts)}</span>
+        </div>` : ''}
+        ${f.coachCost101 > 0 ? `
+        <div class="an-row">
+          <div>
+            <span class="an-row-label">1-on-1 coach payouts</span>
+            <span class="an-row-meta">monthly payout × contract duration, active clients only</span>
+          </div>
+          <span class="an-row-value" style="color:#991b1b">−${fmtMoney(f.coachCost101)}</span>
+        </div>` : ''}
+        ${f.coachCostGC > 0 ? `
+        <div class="an-row">
+          <div>
+            <span class="an-row-label">Group Coaching payouts</span>
+            <span class="an-row-meta">monthly payout × contract duration, active clients only</span>
+          </div>
+          <span class="an-row-value" style="color:#991b1b">−${fmtMoney(f.coachCostGC)}</span>
         </div>` : ''}
         <div class="an-row">
           <div>
