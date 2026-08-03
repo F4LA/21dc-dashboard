@@ -20,7 +20,7 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 **Setup:** agregar la columna `Courtesy Refund` en `Participants` + `Historical`. **Sin deploy de backend** (solo frontend + columna). Pendiente menor: reflejar courtesy en `summarizeChallenge_` del AI (diferido, la AI está rota por créditos).
 
-**Archivos / commits:** index.html · <hash>
+**Archivos / commits:** index.html · 9a92a03
 
 ---
 
