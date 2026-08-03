@@ -172,7 +172,7 @@ Router: `setView(view)`. `'queue'` y `'onboarding'` redirigen a `'today'`. Arran
 
 ### 5.1. Tracker (Challenge Tracker)
 
-- Tabla de todos los participantes del cohort activo: nombre, stage (badge de color), tiempo en stage, indicadores Everfit login / Kickoff, badges de Refunded / Inactive / **Opted Out** (morado) / **No Response** (ámbar) / refund-por-producto. Las filas Opted Out y No Response se muestran atenuadas (resueltas).
+- Tabla de todos los participantes del cohort activo: nombre, stage (badge de color), tiempo en stage, indicadores Everfit login / Kickoff, badges de Refunded / Inactive / **Opted Out** (morado) / **No Response** (ámbar) / **Courtesy refund** (azul) / refund-por-producto. Las filas Opted Out y No Response se muestran atenuadas (resueltas); las Courtesy refund **no** (siguen activas).
 - **Stats arriba** (6 tarjetas, solo cohort activo): `s-total`, `s-participant`, `s-cc`, `s-dc`, `s-purchase`, `s-conv` ("CC → DC Conv.").
 - **Filter chips** (solo cohort activo, salvo "All" que muestra todos para renderizar la sección Incoming): All / No CC / CC Scheduled / CC Issues / Didn't Book DC / DC Scheduled / DC Issues / FU Scheduled / Inactive / **Opted Out** / **No Response** / etc. Los chips solo aparecen si `count > 0`. Los chips "CC Issues"/"DC Issues" **excluyen** Opted Out y No Response (ya no son worklist pendiente).
 - **Búsqueda** por nombre/email (case-insensitive).
@@ -219,7 +219,7 @@ Router: `setView(view)`. `'queue'` y `'onboarding'` redirigen a `'today'`. Arran
 - **Funnel** en tiempo real: Participantes → Booked CC → Attended CC → Booked DC → Attended DC → Purchase, con % en cada transición.
   - "Attended CC" incluye `Didn't Book DC`, `DC Scheduled`, `FU Scheduled` y terminales de DC. "Attended DC" = `Didn't Purchase` / `Purchase 101` / `Purchase GC` / `FU Scheduled`.
 - **Cancel Recovery**: de todos los que **alguna vez** cancelaron/no-show un CC/DC (por presencia de timestamp, no por stage actual): Recuperados (reagendaron) / Opted out / No response / Aún en cadencia. Excluye refunded+inactive; el resto **sí cuenta en el funnel**. Solo aparece si hubo ≥1 cancel/no-show.
-- **Revenue**: challenge-net + montos 1-on-1 y GC (del **Mastersheet**). Filas rojas de refunds por producto ("1-on-1 refunds · N", "GC refunds · N") que restan.
+- **Revenue**: challenge-net + montos 1-on-1 y GC (del **Mastersheet**). Filas rojas de refunds por producto ("1-on-1 refunds · N", "GC refunds · N") que restan. Línea "Courtesy refunds · N" (ámbar) que **netea la cuota del challenge** de los courtesy refunds sin sacarlos del funnel/Purchases.
 - **Source Breakdown**: por fuente (`renderSourceRows`). Afiliados identificados por `Source`; rate uniforme **$97/referral**.
 - **Costs & Profitability**: Ad cost, Affiliate cost, Other costs (del tab Challenge Costs), **coach payouts 1-on-1 y GC** (payout mensual × duración de contrato, solo clientes no-refunded, del Mastersheet), Total costs, **Net profit** (aquí mismo, junto a costos, a propósito). CACs: **Blended CAC** = `(ad+affiliate)/net participants`; **Paid Ads CAC** = `ad/paid-source participants` (sources `meta ads`, `ads`, `manychat ads`).
 - **AI Analysis**: botón "✨ Analyze this challenge" → `runAIAnalysis()` → action `analyzeChallenge` → Apps Script llama a Anthropic (Sonnet `claude-sonnet-4-5-20250929`) server-side y devuelve markdown. Read-only. Filtra al cohort activo. El prompt distingue challenge ACTIVE (calcula "Día X de 21", no interpreta outcomes faltantes como fracaso) vs COMPLETED. **El prompt incluye el breakdown de Cancel Recovery** (`summarizeChallenge_` expone `cancelledEver/recovered/optedOut/noResponse/stillInCadence`; `buildAnalysisPrompt_` le pide narrarlo en el tema de funnel). **⚠ Roto al cierre por falta de créditos en la cuenta de Anthropic Console — ver §14.**
@@ -267,7 +267,8 @@ Secciones (de arriba a abajo):
   - **Manual Booking Override** (azul): botones "📅 Mark CC Scheduled" (stage Participant) / "📅 Mark DC Scheduled" (stage CC-Scheduled o Didn't Book DC). Escribe el timestamp directo al sheet. Para casos de doble perfil GHL / email mismatch donde la automatización no encontró la fila.
   - **Onboarding & Clarity Call outreach (Gabi)**: overrides que marcan timestamp manual — `Login Reachout`, `Welcome Message`, `Training Assigned`, `Calories Assigned`, `Day 2 DM`, `Day 4 Call`, `Day 19 Offer Doc`. (El botón con "Copy message" real vive en las **cards** de Today, no aquí.)
   - **Reschedule outreach (Dennis)** — "Override only": `Reschedule DM`, `Call #1`, `Call #2`, `Offer Doc`.
-  - **Refund**: "Mark Refunded" / "Undo refund" → columna `Refunded`. Excluye de outreach, accountability y analytics.
+  - **Refund**: "Mark Refunded" / "Undo refund" → columna `Refunded`. Excluye de outreach, accountability y analytics ("se fue").
+  - **Courtesy refund**: "Mark courtesy refund" / "Undo" → columna **`Courtesy Refund`**. Para cuando se comp la cuota del challenge (ej. error nuestro) pero la persona **siguió activa** y puede comprar. **Netea la cuota del revenue pero la mantiene contada en todo lo demás** (funnel, Purchases, su venta 1-on-1). Al marcarla **limpia el `Refunded` duro** si estaba puesto (convierte el caso tipo Libby). Precedencia: si por error quedan ambos, courtesy gana (`isRefunded = Refunded && !CourtesyRefund`). Badge azul "Courtesy refund", fila **no** atenuada.
   - **Mark Inactive**: "○ Mark Inactive" / "Undo" → columna `Marked Inactive`. Para unresponsive (no login a Everfit, O login sin intake/macros). Se oculta de queues, se mantiene en Tracker con badge.
 
 **Update Past Challenge** (panel inline en cards externas de Today, no en el modal normal): `openExternalUpdatePanel(...)` → lookup en `Historical` → botones de outcome (`recordExternal` → POST `recordHistoricalEvent`) que escriben timestamp a la fila del contacto en **`Historical`**. Si no está en Historical, dice que lo maneje en GHL.
@@ -284,6 +285,7 @@ Secciones (de arriba a abajo):
 | Reschedule outreach overrides (Deniz) | `markEvent` | **Sheet Participants** |
 | "Copy message" / "Copy reminder" / "Copy macros" | `copyOnboardingMessage` / `copyIntakeReminder` / `copyMacros` | **Nada** (solo clipboard) |
 | Mark Refunded / Undo | `markRefunded` / `undoRefund` | **Sheet Participants** (`Refunded`) |
+| Mark courtesy refund / Undo | `markCourtesyRefund` / `clearCourtesyRefund` → `recordEvent`/`clearEvent` (+ limpia `Refunded`) | **Sheet Participants** (`Courtesy Refund`) |
 | Mark Inactive / Undo | `markInactive` / `clearInactive` → `recordEvent`/`clearEvent` | **Sheet Participants** (`Marked Inactive`) |
 | Opt-Out / Undo (DC) | `markOptedOut` / `clearOptedOut` → `createNote` + `recordEvent`/`clearEvent` | **GHL** (nota `[Opt-Out · autor]`) **+ Sheet Participants** (`Opted Out`) |
 | Add note (autor obligatorio "Note by") | `saveNote` → `createNote` | **GHL** (nota en contacto, prefijo `[autor]`) |

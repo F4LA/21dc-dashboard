@@ -9,6 +9,21 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 ---
 
+## 2026-08-03 — Courtesy refund (refund que no excluye del funnel/Purchases)
+
+**Qué se cambió (frontend `index.html` + columna nueva):**
+- Nueva disposición **Courtesy refund** (columna `Courtesy Refund`, a agregar a mano en `Participants` + `Historical`). Es un refund de la **cuota del challenge** (típicamente por un error nuestro) donde la persona **siguió activa y puede comprar**.
+- Comportamiento: **netea la cuota del challenge** del revenue, pero la mantiene contada en todo lo demás (funnel, Net participants, **Purchases**, su venta 1-on-1). A diferencia del `Refunded` duro, que excluye de todo.
+- `enrich`: `p.isCourtesyRefund`; y `p.isRefunded = Refunded && !CourtesyRefund` (courtesy gana si por error quedan ambos). `computeFunnel`: no hace early-return para courtesy, suma `courtesyRefundCount/Revenue` y los resta del challenge-net. Analytics: línea "Courtesy refunds". Badge azul en Tracker (sin atenuar). Modal: botón "Mark courtesy refund" / Undo (`markCourtesyRefund` limpia el `Refunded` duro al convertir).
+
+**Por qué:** el `Refunded` era demasiado bruto — borraba también la venta 1-on-1 real de alguien que solo recibió un refund de cortesía del challenge (caso Libby: compró 1-on-1 pero no salía en Purchases). Los refunds "se fue" (la mayoría) se quedan como `Refunded` = excluir; courtesy es la excepción.
+
+**Setup:** agregar la columna `Courtesy Refund` en `Participants` + `Historical`. **Sin deploy de backend** (solo frontend + columna). Pendiente menor: reflejar courtesy en `summarizeChallenge_` del AI (diferido, la AI está rota por créditos).
+
+**Archivos / commits:** index.html · <hash>
+
+---
+
 ## 2026-08-03 — Scheduled Calls: fase FU + regla de outcome del FU
 
 **Qué se cambió (frontend `index.html` + backend `Code.gs`):**
