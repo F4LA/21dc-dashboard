@@ -19,7 +19,7 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 **Por qué:** cierra el pedido de que el análisis con AI cuente la historia del cancel-recovery ("de X que cancelaron: A reagendaron, B opt-out, C no respondieron"), no solo las conversiones. El backend no está en git → se documenta aquí y en `DASHBOARD-SYSTEM.md` (§5.4, §14 items 16–17).
 
-**Archivos / commits:** Code.gs (fuera de git) · DASHBOARD-SYSTEM.md + DECISION-LOG.md · 46d7dd2
+**Archivos / commits:** Code.gs (fuera de git) · DASHBOARD-SYSTEM.md + DECISION-LOG.md · a240567
 
 ---
 
