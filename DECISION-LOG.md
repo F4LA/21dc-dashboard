@@ -18,7 +18,7 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 **Por qué:** si el participante nunca agendó/atendió el CC, la probabilidad de que agende un DC es mínima, así que el offer doc de Gabi ahí no aporta. Los offer docs los maneja Deniz dentro de la reschedule cadence / conversación. Decisión de Bernardo.
 
-**Archivos / commits:** index.html · <hash>
+**Archivos / commits:** index.html · 30fc741
 
 ---
 
