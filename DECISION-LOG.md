@@ -18,7 +18,7 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 **Por qué:** el dashboard escribe todas las notas con el mismo PIT token, así que en GHL todas aparecen del mismo usuario y no se puede saber quién del equipo la dejó. Capturar el autor en el dashboard resuelve la auditabilidad sin cambiar el backend.
 
-**Archivos / commits:** index.html · <hash>
+**Archivos / commits:** index.html · ceae018
 
 ---
 
