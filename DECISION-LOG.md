@@ -9,6 +9,22 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 ---
 
+## 2026-08-03 — GHL.gs: errores en inglés + match de columna tolerante a espacios
+
+**Qué se cambió (backend `GHL.gs`):**
+- Todos los mensajes de `throw new Error(...)` que eran en español → **inglés** (`recordEvent_`, `recordHistoricalEvent_`, `archiveChallenge_`, `ghlRequest_`/`ghlRequestVersioned_`). Cumple la regla "UI 100% en inglés" (el error llegaba al `alert` del frontend).
+- Nueva helper `findHeaderIndex_(headers, columnName)` que compara con `.trim()` en ambos lados; `recordEvent_` y `recordHistoricalEvent_` la usan. Un header escrito a mano con espacio de más (ej. `"Courtesy Refund "`) ya no rompe el match.
+
+**Por qué:** al agregar la columna `Courtesy Refund` a mano quedó con un espacio al final → `recordEvent_` tiraba "Columna no encontrada" (en español). Se corrige el idioma y se blinda contra espacios accidentales en headers.
+
+**Nota importante:** la copia `~/Downloads/GHL.gs` estaba **desactualizada** (de junio, mensajes en inglés) vs el deployado (español). Bernardo pasó el `GHL.gs` actual del editor; se corrigió sobre esa versión y se re-sincronizó `~/Downloads/GHL.gs`.
+
+**Setup / deploy:** pegar `GHL.gs` completo → **Manage deployments → Edit → New version**. `GHL.gs` no está en git.
+
+**Archivos / commits:** GHL.gs (fuera de git) · DECISION-LOG.md · <hash>
+
+---
+
 ## 2026-08-03 — Courtesy refund (refund que no excluye del funnel/Purchases)
 
 **Qué se cambió (frontend `index.html` + columna nueva):**

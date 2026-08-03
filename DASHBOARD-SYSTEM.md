@@ -475,7 +475,8 @@ Ver §10.4. El intake form ya **no** se llena en Everfit — ahora es un **Googl
 - [ ] **`isActiveCohort` defensivo** — no romper el fallback "sin info = activo".
 - [ ] **Onboarding queues son stage-based, no cohort-based** (a propósito).
 - [ ] **Sin em dashes (—) en el copy** de los mensajes (instrucción de Bernardo).
-- [ ] **UI 100% en inglés** (aunque el normalizer de meses aún acepta español como input).
+- [ ] **UI 100% en inglés** (aunque el normalizer de meses aún acepta español como input). Incluye los `throw new Error(...)` del backend — llegan al `alert` del frontend (se corrigieron los de `GHL.gs` el 2026-08-03).
+- [ ] **Match de columnas por nombre es tolerante a espacios** en `recordEvent_`/`recordHistoricalEvent_` (`findHeaderIndex_` con `.trim()`), pero **igual conviene escribir los headers sin espacios** al agregarlos a mano.
 - [ ] **Refunded / Inactive** se excluyen de queues, accountability y analytics.
 - [ ] **`data-table` es solo del Tracker** — nunca debe aparecer en Today.
 - [ ] **Timeout de Apps Script = 6 min.** Cuidado con lookups per-row sin batchear.
