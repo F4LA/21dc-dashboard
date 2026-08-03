@@ -2180,6 +2180,9 @@ async function loadNotesInBackground() {
       p.ccCallAt = d.ccCallAt || '';
       p.ccCallEndAt = d.ccCallEndAt || '';
       p.ccCallAssignedUserName = d.ccCallAssignedUserName || '';
+      p.fuCallAt = d.fuCallAt || '';
+      p.fuCallEndAt = d.fuCallEndAt || '';
+      p.fuCallAssignedUserName = d.fuCallAssignedUserName || '';
       // Purchase amount + refund flag from the Mastersheet (first invoice
       // per email). Filled here rather than in the initial lite call so the
       // page-open path stays fast. Analytics revenue math prefers these
@@ -4243,7 +4246,7 @@ function renderAccountability() {
         <span class="acc-section-title">Calls — coming up</span>
         <span class="acc-section-count${calls.upcoming.length === 0 ? ' zero' : ''}">${calls.upcoming.length}</span>
       </div>
-      <div class="acc-section-desc">Clarity + Discovery Calls still to happen (real time from GHL Calendar, Eastern). Sorted soonest first.</div>
+      <div class="acc-section-desc">Clarity, Discovery + Follow-Up Calls still to happen (real time from GHL Calendar, Eastern). Sorted soonest first.</div>
       ${calls.upcoming.length === 0
         ? `<div class="acc-empty">No upcoming calls scheduled.</div>`
         : `<div class="acc-list">${calls.upcoming.map(it => renderCallCard(it, false)).join('')}</div>`}
@@ -4329,7 +4332,7 @@ function getScheduledCalls(callType) {
 // Merges CC + DC into two time-sorted lists, tagging each item with its type.
 function getAllScheduledCalls() {
   const out = { upcoming: [], needsUpdate: [] };
-  ['CC', 'DC'].forEach(t => {
+  ['CC', 'DC', 'FU'].forEach(t => {
     const r = getScheduledCalls(t);
     r.upcoming.forEach(p => out.upcoming.push({ p, t }));
     r.needsUpdate.forEach(p => out.needsUpdate.push({ p, t }));
@@ -5277,7 +5280,8 @@ function teamMemberDropdownHtml(idAttr, members, onChangeAttr) {
 // time — the real time lives only in GHL Calendar (dc/ccCallAt).
 const CALL_TYPES = {
   CC: { stage: 'CC - Scheduled', at: 'ccCallAt', end: 'ccCallEndAt', owner: 'ccCallAssignedUserName', label: 'Clarity Call' },
-  DC: { stage: 'DC - Scheduled', at: 'dcCallAt', end: 'dcCallEndAt', owner: 'lastDcAssignedUserName', label: 'Discovery Call' }
+  DC: { stage: 'DC - Scheduled', at: 'dcCallAt', end: 'dcCallEndAt', owner: 'lastDcAssignedUserName', label: 'Discovery Call' },
+  FU: { stage: 'FU - Scheduled', at: 'fuCallAt', end: 'fuCallEndAt', owner: 'fuCallAssignedUserName', label: 'Follow-Up Call' }
 };
 const CALL_BUFFER_MS = 3600000;  // 1h grace after the call ends before "not updated"
 
@@ -5296,8 +5300,10 @@ function renderCallTimeSection(p) {
   if (!wrap) return;
   const stage = p.stageName || '';
   let cfg = null;
-  if (stage === CALL_TYPES.CC.stage && p.ccCallAt) cfg = CALL_TYPES.CC;
-  else if (stage === CALL_TYPES.DC.stage && p.dcCallAt) cfg = CALL_TYPES.DC;
+  for (const k of Object.keys(CALL_TYPES)) {
+    const c = CALL_TYPES[k];
+    if (stage === c.stage && p[c.at]) { cfg = c; break; }
+  }
   if (!cfg) { wrap.innerHTML = ''; return; }
   const timeStr = fmtCallTimeET(p[cfg.at]);
   const rel     = relTime(p[cfg.at]);

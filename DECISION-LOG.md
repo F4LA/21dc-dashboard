@@ -9,6 +9,22 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 ---
 
+## 2026-08-03 — Scheduled Calls: fase FU + regla de outcome del FU
+
+**Qué se cambió (frontend `index.html` + backend `Code.gs`):**
+- **Backend:** nueva `getFuCallTimesByEmail_` (calendario FU, cache `fuCallTimesByEmail:v1`, calentada dentro de `warmLastDcCache`). `getOpportunities` expone `fuCallAt`/`fuCallEndAt`/`fuCallAssignedUserName`.
+- **Frontend:** `CALL_TYPES` ahora incluye **FU**; `renderCallTimeSection` recorre `CALL_TYPES` (auto-incluye FU) y `getAllScheduledCalls` mezcla CC+DC+FU. Las secciones de Accountability y el modal ya muestran FU.
+
+**Regla del FU (decisión de Bernardo, sin código nuevo):** un FU con **no-show o cancel** se marca como **`Didn't Purchase`** (no se crean stages FU No Show/Cancelled ni cadencia de chase). El prompt post-llamada ("marcar compró / no compró") ya existía en **Today → Calls Today** (badge "Needs update" → "Processed" al marcar el outcome; para FU aplica `hasStageAdvancedAfter`). **Caveat documentado:** `Didn't Purchase` es terminal duro; si reagendan luego, no reaparecen solos (raro, manual).
+
+**Por qué:** el FU es la llamada de cierre; a esas alturas un no-show/cancel ≈ no compra, así que no vale una cadencia. Lo que faltaba era visibilidad (coming up / not updated) para FU y asegurar que el outcome se registre.
+
+**Setup / deploy:** pegar `Code.gs` completo → New version. No requiere trigger nuevo. Copia `~/Downloads` sincronizada.
+
+**Archivos / commits:** index.html · Code.gs (fuera de git) · <hash>
+
+---
+
 ## 2026-08-03 — Se quita el "Day 19 Offer Doc" del plato de Gabi
 
 **Qué se cambió (frontend `index.html`):**
