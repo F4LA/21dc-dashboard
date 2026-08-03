@@ -1,9 +1,15 @@
-# HANDOFF — 21DC Dashboard (Strong Standard Coaching)
+# DASHBOARD-SYSTEM — 21DC Dashboard (Strong Standard Coaching)
 
-**Documento de traspaso exhaustivo · Uso interno**
-Cubre la construcción y estado del dashboard entre el **9 de junio y el 14 de julio de 2026** (sesión "21DC Dashboard", ~30 MB de conversación), más el contexto anterior de los Proyectos A/B/C/D.
+**Última actualización: 2026-08-03**
 
-> **Para qué sirve este documento.** Está diseñado para que una sesión nueva de Claude Code (o cualquier persona técnica) pueda entender el dashboard al 100% y hacer modificaciones sin romper nada ni perder contexto. Prioriza completitud sobre brevedad. Si algo aquí contradice el código, **el código gana** — este doc refleja el estado al 14-jul-2026.
+**Documento vivo · Fuente de verdad permanente · Uso interno**
+Describe cómo funciona el 21DC Dashboard: su arquitectura, cada vista, cada botón, las integraciones, las decisiones y sus porqués. **No es un traspaso puntual** — es la referencia canónica que se mantiene actualizada en cada cambio al dashboard.
+
+> **Para qué sirve este documento.** Es la fuente de verdad de cómo funciona el dashboard. Cualquier persona (o sesión nueva de Claude Code) debería poder leerlo y entender el sistema al 100% para operarlo o modificarlo sin romper nada. Prioriza completitud sobre brevedad.
+>
+> **Cómo se mantiene vivo (regla obligatoria).** Todo cambio al dashboard —frontend `index.html` o backend `.gs`— **debe** actualizar este documento y su fecha de "Última actualización", y registrar la decisión en [`DECISION-LOG.md`](DECISION-LOG.md), antes de hacer `git push`. Ver la regla completa en `CLAUDE.md`. Un cambio no está terminado hasta que la documentación esté actualizada y subida.
+>
+> Si algo aquí contradice el código, **el código gana** — y entonces este documento está desactualizado y hay que corregirlo.
 
 ---
 
