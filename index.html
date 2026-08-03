@@ -1025,6 +1025,14 @@
     .add-note textarea:focus { outline: none; border-color: var(--accent); }
     .add-note-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
     .note-saved { font-size: 12px; color: var(--success); font-weight: 500; }
+    .note-author-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .note-author-row label { font-size: 12px; color: var(--text-muted); font-weight: 600; flex-shrink: 0; }
+    .add-note select {
+      border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px;
+      font-size: 13px; font-family: inherit; background: var(--surface);
+      color: var(--text-primary);
+    }
+    .add-note select:focus { outline: none; border-color: var(--accent); }
 
     /* Notes list */
     .notes-list { display: flex; flex-direction: column; gap: 8px; }
@@ -1336,6 +1344,10 @@
       <!-- Add note -->
       <div class="section-title">Add note</div>
       <div class="add-note">
+        <div class="note-author-row">
+          <label for="note-author">Note by</label>
+          <select id="note-author" onchange="rememberNoteAuthor(this.value)"></select>
+        </div>
         <textarea id="note-input" placeholder="Write a note…"></textarea>
         <div class="add-note-footer">
           <span class="note-saved" id="note-saved" style="display:none">✓ Note saved to GHL</span>
@@ -4798,6 +4810,7 @@ async function openModal(emailOrId) {
   // Collapse the "More options" group each time a modal opens
   resetMoreOptions();
 
+  populateNoteAuthor();
   document.getElementById('note-input').value = '';
   document.getElementById('note-saved').style.display = 'none';
   document.getElementById('note-btn').disabled = false;
@@ -5946,6 +5959,8 @@ function renderOptedOutSection(p) {
 async function markOptedOut() {
   if (!activeContact) return;
   const target = activeContact;
+  const author = requireNoteAuthor();
+  if (!author) return;
   const reason = (prompt('Opt-Out reason (required): what did they say? This is saved as a note on the contact.') || '').trim();
   if (!reason) { alert('A reason note is required to mark Opt-Out.'); return; }
 
@@ -5966,7 +5981,7 @@ async function markOptedOut() {
 
   try {
     // 1) Save the reason as a GHL note (auditability) — mandatory per SOP.
-    const noteBody = '[Opt-Out] ' + reason;
+    const noteBody = '[Opt-Out · ' + author + '] ' + reason;
     const noteRes = await fetch(SCRIPT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
@@ -6091,10 +6106,41 @@ function onOverlayClick(e) {
 }
 
 // ── Save note ─────────────────────────────────────────────
+// ── Note authorship ──────────────────────────────────────
+// The dashboard writes every GHL note through one PIT token, so GHL can't tell
+// who on the team actually wrote it. We capture the author in the dashboard and
+// prepend it to the note body ("[Gabi] …"). Mandatory — no note without one.
+// Persisted in localStorage so each teammate picks themselves once per device.
+const NOTE_AUTHORS = ['Gabi', 'Bernardo', 'Deniz', 'Joey', 'Anthony'];
+
+function getSavedNoteAuthor() {
+  try { return localStorage.getItem('note-author') || ''; } catch(_) { return ''; }
+}
+function rememberNoteAuthor(v) {
+  try { if (v) localStorage.setItem('note-author', v); } catch(_) {}
+}
+function populateNoteAuthor() {
+  const sel = document.getElementById('note-author');
+  if (!sel) return;
+  const saved = getSavedNoteAuthor();
+  sel.innerHTML = '<option value="">Select who…</option>' +
+    NOTE_AUTHORS.map(n => `<option value="${esc(n)}"${n === saved ? ' selected' : ''}>${esc(n)}</option>`).join('');
+}
+// Reads the current author, alerting + returning '' if none is selected.
+function requireNoteAuthor() {
+  const sel = document.getElementById('note-author');
+  const author = (sel && sel.value || '').trim();
+  if (!author) { alert('Select who is leaving this note ("Note by") first.'); }
+  return author;
+}
+
 async function saveNote() {
   if (!activeContact) return;
-  const body = document.getElementById('note-input').value.trim();
-  if (!body) return;
+  const text = document.getElementById('note-input').value.trim();
+  if (!text) return;
+  const author = requireNoteAuthor();
+  if (!author) return;
+  const body = '[' + author + '] ' + text;
 
   const btn = document.getElementById('note-btn');
   btn.disabled = true;

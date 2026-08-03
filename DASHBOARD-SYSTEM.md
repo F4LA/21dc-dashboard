@@ -257,6 +257,7 @@ Secciones (de arriba a abajo):
   - **Opt-Out** (solo `DC - Cancelled` / `DC - No Show`, no refunded/inactive/ya-opted-out): botón `⊘ Opt-Out` (morado) → `markOptedOut()` pide una **razón obligatoria** (`prompt`), la guarda como nota en GHL (`[Opt-Out] <razón>`) **y** escribe la columna `Opted Out` vía `recordEvent`. Si ya está opted out: banner + "Undo" (`clearOptedOut()`).
   - **No Response**: banner ámbar read-only cuando `p.isNoResponse` (derivado). Sin botón. En un DC no-response se muestran ambos (el banner + el botón Opt-Out).
 - **"Add note"** → POST `createNote` → **crea nota en el contacto de GHL** (`/contacts/{id}/notes`). No toca el sheet.
+  - **Autor obligatorio ("Note by"):** un selector arriba del textarea exige elegir quién deja la nota (`NOTE_AUTHORS` = Gabi/Bernardo/Deniz/Joey/Anthony). No se puede guardar sin autor. Se antepone al cuerpo → `[Gabi] <nota>`. **Por qué:** todas las notas se escriben con el mismo PIT token, así que GHL no distingue quién las dejó; capturamos el autor en el dashboard. La elección se recuerda en `localStorage` (`note-author`) por dispositivo (`populateNoteAuthor`/`rememberNoteAuthor`/`requireNoteAuthor`). La nota de **Opt-Out** usa el mismo autor → `[Opt-Out · Deniz] <razón>`.
 - **Notes history**: historial de notas cargado de GHL.
 - **"More options"** (grupo colapsable, default cerrado — acciones poco frecuentes):
   - **Manual Booking Override** (azul): botones "📅 Mark CC Scheduled" (stage Participant) / "📅 Mark DC Scheduled" (stage CC-Scheduled o Didn't Book DC). Escribe el timestamp directo al sheet. Para casos de doble perfil GHL / email mismatch donde la automatización no encontró la fila.
@@ -280,8 +281,8 @@ Secciones (de arriba a abajo):
 | "Copy message" / "Copy reminder" / "Copy macros" | `copyOnboardingMessage` / `copyIntakeReminder` / `copyMacros` | **Nada** (solo clipboard) |
 | Mark Refunded / Undo | `markRefunded` / `undoRefund` | **Sheet Participants** (`Refunded`) |
 | Mark Inactive / Undo | `markInactive` / `clearInactive` → `recordEvent`/`clearEvent` | **Sheet Participants** (`Marked Inactive`) |
-| Opt-Out / Undo (DC) | `markOptedOut` / `clearOptedOut` → `createNote` + `recordEvent`/`clearEvent` | **GHL** (nota `[Opt-Out]`) **+ Sheet Participants** (`Opted Out`) |
-| Add note | `saveNote` → `createNote` | **GHL** (nota en contacto) |
+| Opt-Out / Undo (DC) | `markOptedOut` / `clearOptedOut` → `createNote` + `recordEvent`/`clearEvent` | **GHL** (nota `[Opt-Out · autor]`) **+ Sheet Participants** (`Opted Out`) |
+| Add note (autor obligatorio "Note by") | `saveNote` → `createNote` | **GHL** (nota en contacto, prefijo `[autor]`) |
 | Reschedule CC/DC, Book DC now, Book FU, Book CC (Day 4) | `confirmReschedule`/`confirmBookDc`/`confirmFollowUp`/`confirmDay4Book` → `bookAppointment` | **GHL Calendar** (+ sheet `FU Scheduled` solo para FU) |
 | Update Past Challenge outcomes | `recordExternal` → `recordHistoricalEvent` | **Sheet Historical** |
 | Save Challenge Start Date | `saveStartDate` → `updateChallengeStartDate` | **Script Property** `CHALLENGE_START_DATE` |

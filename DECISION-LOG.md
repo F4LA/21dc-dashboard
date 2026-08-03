@@ -9,6 +9,19 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 ---
 
+## 2026-08-03 — Autor obligatorio en las notas ("Note by")
+
+**Qué se cambió (frontend `index.html`):**
+- La sección "Add note" del modal ahora tiene un selector **"Note by"** (Gabi/Bernardo/Deniz/Joey/Anthony) **obligatorio**: `saveNote` no guarda sin autor y antepone `[autor]` al cuerpo de la nota en GHL.
+- La elección se recuerda en `localStorage` (`note-author`) por dispositivo, así cada quien se elige una vez. Helpers: `NOTE_AUTHORS`, `populateNoteAuthor`, `rememberNoteAuthor`, `requireNoteAuthor`.
+- La nota de **Opt-Out** también exige y estampa el autor → `[Opt-Out · <autor>] <razón>`.
+
+**Por qué:** el dashboard escribe todas las notas con el mismo PIT token, así que en GHL todas aparecen del mismo usuario y no se puede saber quién del equipo la dejó. Capturar el autor en el dashboard resuelve la auditabilidad sin cambiar el backend.
+
+**Archivos / commits:** index.html · <hash>
+
+---
+
 ## 2026-08-03 — Fase 2: Cancel Recovery en el prompt de AI Analysis (backend)
 
 **Qué se cambió (backend `Code.gs`):**
