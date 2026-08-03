@@ -26,7 +26,7 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 - El dashboard trataba todo `Cancelled/No Show` como "persíguelo para reagendar". Cuando alguien cancela porque se auto-descalificó (no es fit / budget), perseguirlo desperdicia esfuerzo del closer y contamina los flags de Accountability con leads incerrables. Opt-Out cierra ese caso; No Response hace visible (y permite cerrar) el ghost tras la cadencia completa.
 - CC no lleva Opt-Out: es pre-oferta, una cancelación siempre vale reagendar (decisión de Bernardo). Solo el DC tiene la compuerta de calificación (videos pre-DC) que produce auto-descalificaciones.
 
-**Archivos / commits:** index.html · b6df069
+**Archivos / commits:** index.html · 73fcb26
 
 ---
 
