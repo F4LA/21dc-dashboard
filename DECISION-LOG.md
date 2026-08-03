@@ -20,7 +20,7 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 **Setup / deploy:** pegar en `Code.gs` los 2 cambios (2 líneas en `getOpportunities` + función `getLastDcAssignedByEmail_` completa) → **Manage deployments → Edit → New version**. Copia `~/Downloads/Code_21DC_Dashboard.gs` sincronizada. **Fase CC pendiente** (§14 item 18).
 
-**Archivos / commits:** index.html · Code.gs (fuera de git) · <hash>
+**Archivos / commits:** index.html · Code.gs (fuera de git) · cea5008
 
 ---
 
