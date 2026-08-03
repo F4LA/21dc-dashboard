@@ -9,6 +9,19 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 ---
 
+## 2026-08-03 — Se quita el "Day 19 Offer Doc" del plato de Gabi
+
+**Qué se cambió (frontend `index.html`):**
+- `getCCBookingFlow`: eliminado el paso **Day 19 Offer Doc** (y el `day19EligibleStages`). El flujo de CC Booking Outreach queda Day 2 DM → Day 4 Call.
+- `getJackieFlags`: quitado el step `Day 6 Offer Doc Sent` de la cadencia; el `Day 4 Call #1` ahora tiene `next: null`. Ya no genera flag de Accountability por Offer Doc.
+- Se conserva: la columna `Day 6 Offer Doc Sent`, su copy message y el override manual pasivo en el modal (More options). El **Reschedule Offer Doc de Deniz** queda intacto.
+
+**Por qué:** si el participante nunca agendó/atendió el CC, la probabilidad de que agende un DC es mínima, así que el offer doc de Gabi ahí no aporta. Los offer docs los maneja Deniz dentro de la reschedule cadence / conversación. Decisión de Bernardo.
+
+**Archivos / commits:** index.html · <hash>
+
+---
+
 ## 2026-08-03 — Scheduled Calls: fase CC (completa CC + DC)
 
 **Qué se cambió (frontend `index.html` + backend `Code.gs`):**

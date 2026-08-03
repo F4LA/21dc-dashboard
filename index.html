@@ -1655,13 +1655,11 @@ function getCCBookingFlow() {
   const day = currentChallengeDay();
   if (day === null || day < 2) return [];  // No outreach before Day 2
 
-  // Day 2 DM and Day 4 Call only make sense while the participant hasn't
-  // booked a CC yet (stageName === 'Participant'). Day 19 Offer Doc is the
-  // universal last-ditch outreach: it fires for participants still on
-  // 'Participant' AND for those whose CC fell through (Cancelled / No Show)
-  // and never rebooked. That's the "tuvo CC pero no sucedió" bucket.
-  const day19EligibleStages = ['Participant', 'CC - Cancelled', 'CC - No Show'];
-
+  // Day 2 DM → Day 4 Call only. Both only make sense while the participant
+  // hasn't booked a CC yet (stageName === 'Participant'). The Day 19 Offer Doc
+  // step was removed (2026-08-03): if they never booked the CC, the odds of a
+  // DC booking are minimal, so Gabi no longer chases an offer doc here. Offer
+  // docs belong to Deniz, sent inside the reschedule/conversation flow.
   return participants
     .filter(p => isActiveCohort(p) && !p.isRefunded && !p.isInactive)
     .map(p => {
@@ -1669,14 +1667,7 @@ function getCCBookingFlow() {
       const stage = p.stageName;
       let action = null;
 
-      // Day 19 Offer Doc — takes precedence if we're past Day 19 and eligible.
-      // Bernardo confirmed: it's the fallback closer for anyone who didn't
-      // reach a purchase decision by the last Friday, whether they never
-      // booked or their CC fell through.
-      if (day >= 19 && day19EligibleStages.indexOf(stage) !== -1 && !sd['Day 6 Offer Doc Sent']) {
-        action = { type: 'day_19_offer_doc', label: 'Send Day 19 Offer Doc', dayDue: 19, hasCopy: true, owner: 'gabi', timeAnchor: 'challenge_day' };
-      } else if (stage === 'Participant') {
-        // Day 2 / Day 4 only for participants who never booked their CC.
+      if (stage === 'Participant') {
         if (!sd['Day 2 DM Sent']) {
           action = { type: 'day_2_dm', label: 'Send Day 2 DM', dayDue: 2, hasCopy: true, owner: 'gabi', timeAnchor: 'challenge_day' };
         } else if (!sd['Day 4 Call #1']) {
@@ -1953,8 +1944,8 @@ function getJackieFlags() {
     if (isActiveCohort(p) && p.stageName === 'Participant' && day !== null && day >= 2) {
       const expected = [
         { col: 'Day 2 DM Sent',         dueDay: 2,  next: 'Day 4 Call' },
-        { col: 'Day 4 Call #1',         dueDay: 4,  next: 'Day 19 Offer Doc' },
-        { col: 'Day 6 Offer Doc Sent',  dueDay: 19, next: null }
+        { col: 'Day 4 Call #1',         dueDay: 4,  next: null }
+        // Day 19 Offer Doc removed from Gabi's cadence (2026-08-03) — see getCCBookingFlow.
       ];
 
       let prevDone = true;

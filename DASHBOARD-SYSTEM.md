@@ -199,7 +199,7 @@ Router: `setView(view)`. `'queue'` y `'onboarding'` redirigen a `'today'`. Arran
    - **Welcome Message** (Gabi): copy + mark sent. Muestra "Logged in X days ago".
    - **Intake Form** (Gabi): lee del Macro Engine. 3 buckets — 🟢 Ready to Assign (status `READY TO ASSIGN`, con botones Training/Calories fusionados), 🟡 Need Review (`BERNARDO REVIEW`), ⚪ Intake Pending (sin form; state machine Reminder #1/#2). Carga en background (`loadIntakeMacroInBackground`).
    - **Setup Tasks** (Training & Calories): **fusionada dentro del card Ready to Assign** del Intake; la sección propia quedó como dead code. Requiere intake submitted para aparecer.
-   - **CC Booking Outreach** (Gabi, dueña única del flujo de agendamiento): Day 2 DM → Day 4 Call → Day 19 Offer Doc. La Day 4 Call es de **Bernardo** (tag `owner-bernardo`) y tiene botón inline "📅 Book CC now". Muestra "Challenge Day X".
+   - **CC Booking Outreach** (Gabi, dueña única del flujo de agendamiento): Day 2 DM → Day 4 Call. La Day 4 Call es de **Bernardo** (tag `owner-bernardo`) y tiene botón inline "📅 Book CC now". Muestra "Challenge Day X". **El "Day 19 Offer Doc" se eliminó de este flujo (2026-08-03):** si nunca agendaron el CC, la probabilidad de que agenden DC es mínima; los offer docs son de Deniz, dentro de la reschedule cadence / conversación. La columna `Day 6 Offer Doc Sent` sigue existiendo (override manual pasivo en el modal).
    - Todo colapsado por default; estado persistido en localStorage por sección.
 
 ### 5.3. Accountability (solo Bernardo)
@@ -299,7 +299,7 @@ Secciones (de arriba a abajo):
 ## 8. Roles y personas (ownership)
 
 - **Bernardo** — Owner / Auditor. Vistas: Accountability (diario), Analytics (semanal), History (post-challenge), Settings. Hace la **Day 4 Call**. Revisa los intakes flagged (`BERNARDO REVIEW`).
-- **Gabi** — Lead Coach / onboarding. **Dueña única del flujo completo de agendamiento del CC** (Day 2 DM → Day 4 → Day 19 Offer Doc) + Login Reachout + Welcome + Intake + Setup Tasks (Training/Calories). Reemplazó a **Jackie** (que salió). *Nombres internos de funciones (`getJackieFlags`, var `jackie`) NO se renombraron.*
+- **Gabi** — Lead Coach / onboarding. **Dueña única del flujo de agendamiento del CC** (Day 2 DM → Day 4; el Day 19 Offer Doc se quitó de su plato el 2026-08-03) + Login Reachout + Welcome + Intake + Setup Tasks (Training/Calories). Reemplazó a **Jackie** (que salió). *Nombres internos de funciones (`getJackieFlags`, var `jackie`) NO se renombraron.*
 - **Deniz** (a veces "Dennis") — **Closer**. Dueño del CC (único CC closer, junto con Anthony) y de sus DCs/FUs. Dueño de la reschedule cadence (DM → Call #1 → Call #2 → Offer Doc). Regla: **el closer del DC original es dueño de todo lo downstream**.
 - **Joey** — **Closer**. Solo DCs y FUs (sin outreach de onboarding).
 - **Anthony** — **Clarity Caller only**. Solo hace CCs junto a Deniz. **NUNCA** entra en la lógica de ownership de DC/FU/reschedule/Action Queue.
