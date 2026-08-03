@@ -395,25 +395,24 @@ Ver §10.4. El intake form ya **no** se llena en Everfit — ahora es un **Googl
 
 **Críticos / abiertos:**
 1. **AI Analysis roto — créditos de Anthropic Console.** "Your credit balance is too low". Bernardo debe identificar/crear la cuenta del `ANTHROPIC_API_KEY` (recomendado bajo `bernardo@fit4lifeacademy.health`), decidir Individual vs Organization, cargar créditos (~$20), generar key nuevo y reemplazar el Script Property. **Sin resolver.**
-2. **Feature sin implementar:** "cambia lo de que si no llenas ese día ya no cuenta; puedes llenar hasta el día anterior" (2026-07-10). No se aclaró a cuál feature aplica (Accountability/Everfit workouts, Setup Tasks/onboarding, o cadences de Intake/Login Reachout). **Bernardo nunca respondió la pregunta de aclaración.**
-3. **"Errorcitos" en Analytics** que Bernardo quería trabajar en una sesión nueva. Nunca especificados.
+2. **"Errorcitos" en Analytics** que Bernardo quería trabajar en una sesión nueva. Nunca especificados.
 
 **Operacionales (dependen de Bernardo/Miguel):**
-4. **Deploy de backend** tras los últimos cambios (si aún no): pegar los `.gs` de `~/Downloads/` y hacer New Version. Correr `installWarmCacheTrigger` una vez.
-5. **Trigger de reschedule en GHL** — confirmar que dispara bien con el calendar admin.
-6. **Participante "61 vs 60":** una fila sin `Challenge Month` (columna AJ). Bernardo debe revisar.
-7. **Backfill de `Challenge Month`** en filas viejas del `Historical` (manual, Miguel/Bernardo).
-8. **Solución arquitectónica de owner attribution:** columna `Last DC Closer` en el sheet (escrita por automatización) eliminaría el cold-start/cache/warmer del Action Queue. Requiere Miguel. Pendiente de evaluar.
-9. **Actualizar los documentos madre** en Google Drive (Overview, Deniz SOP, Coach/Gabi SOP, Master Decision Log — el Proyecto D quedó en "Pendiente" ahí, Personnel) para reflejar todo lo agregado al dashboard. Incluye documentar en el SOP de Bernardo los cambios de Settings/Archive/cohort transitions.
-10. **Validación end-to-end** de los 4 flujos de booking (Reschedule CC/DC, Book DC inline, Book FU) con participante real — se delegó a Deniz (Bernardo no puede probar sin agendar de verdad).
+3. **Deploy de backend** tras los últimos cambios (si aún no): pegar los `.gs` de `~/Downloads/` y hacer New Version. Correr `installWarmCacheTrigger` una vez.
+4. **Trigger de reschedule en GHL** — confirmar que dispara bien con el calendar admin.
+5. **Participante "61 vs 60":** una fila sin `Challenge Month` (columna AJ). Bernardo debe revisar.
+6. **Backfill de `Challenge Month`** en filas viejas del `Historical` (manual, Miguel/Bernardo).
+7. **Solución arquitectónica de owner attribution:** columna `Last DC Closer` en el sheet (escrita por automatización) eliminaría el cold-start/cache/warmer del Action Queue. Requiere Miguel. Pendiente de evaluar.
+8. **Actualizar los documentos madre** en Google Drive (Overview, Deniz SOP, Coach/Gabi SOP, Master Decision Log — el Proyecto D quedó en "Pendiente" ahí, Personnel) para reflejar todo lo agregado al dashboard. Incluye documentar en el SOP de Bernardo los cambios de Settings/Archive/cohort transitions.
+9. **Validación end-to-end** de los 4 flujos de booking (Reschedule CC/DC, Book DC inline, Book FU) con participante real — se delegó a Deniz (Bernardo no puede probar sin agendar de verdad).
 
 **Menores / diferidos (no bloqueantes):**
-11. Opción "Already sent? Backdate" (date picker) para intake reminders — ofrecida, no implementada.
-12. Housekeeping de dead code (`getSetupTasksQueue`, `renderSetupTaskCard`, ramas muertas de `renderQueueTable`).
-13. LOW findings de la auditoría: `getIntakePending` falla en silencio si el fetch da error; search en Today re-renderiza todo por keystroke; confirmar si `getJackieFlags` Welcome debe filtrar por cohort.
-14. Considerar revocar el PIT viejo de GHL cuando todo esté validado.
-15. `computeStageLocal` (frontend) diverge levemente de `computeStage_` (backend) — mantenerlos en sync al tocar la lógica de stage.
-16. Llenar el tab `Challenge Costs` con números reales por challenge (sin eso, las cards muestran placeholder).
+10. Opción "Already sent? Backdate" (date picker) para intake reminders — ofrecida, no implementada.
+11. Housekeeping de dead code (`getSetupTasksQueue`, `renderSetupTaskCard`, ramas muertas de `renderQueueTable`).
+12. LOW findings de la auditoría: `getIntakePending` falla en silencio si el fetch da error; search en Today re-renderiza todo por keystroke; confirmar si `getJackieFlags` Welcome debe filtrar por cohort.
+13. Considerar revocar el PIT viejo de GHL cuando todo esté validado.
+14. `computeStageLocal` (frontend) diverge levemente de `computeStage_` (backend) — mantenerlos en sync al tocar la lógica de stage.
+15. Llenar el tab `Challenge Costs` con números reales por challenge (sin eso, las cards muestran placeholder).
 
 ---
 
