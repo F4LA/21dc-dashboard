@@ -19,7 +19,7 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 **Setup / deploy:** pegar `Code.gs` completo → **Manage deployments → Edit → New version**. No requiere trigger nuevo (el warmer de 10 min ya calienta CC). Copia `~/Downloads/Code_21DC_Dashboard.gs` sincronizada.
 
-**Archivos / commits:** index.html · Code.gs (fuera de git) · <hash>
+**Archivos / commits:** index.html · Code.gs (fuera de git) · bf94ba9
 
 ---
 
