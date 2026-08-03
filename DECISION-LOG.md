@@ -9,6 +9,21 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 ---
 
+## 2026-08-03 — Scheduled Calls: hora real del DC + "not updated" (fase DC)
+
+**Qué se cambió (frontend `index.html` + backend `Code.gs`):**
+- **Backend:** `getLastDcAssignedByEmail_` ahora guarda `callAt`/`callEndAt` (hora real del DC de GHL Calendar) además de la atribución del closer; cache key bump `:v1`→`:v2`. `getOpportunities` expone `dcCallAt`/`dcCallEndAt` (solo en la llamada full). Reusa el fetch ya cacheado + warmed, así que no agrega costo al request.
+- **Frontend — modal:** `renderCallTimeSection` muestra "Discovery Call: <hora ET>" en `DC - Scheduled`; si terminó hace 1h+ y sigue en Scheduled, ámbar con ⚠.
+- **Frontend — Accountability:** dos secciones nuevas: **"Discovery Calls — coming up"** (upcoming, ordenado por más próxima = cuántas llamadas quedan) y **"Discovery Calls — happened, not updated"** (call terminó hace 1h+, ventana 7 días, sigue en Scheduled). Helpers `getScheduledDcCalls`, `renderCallCard`, `fmtCallTimeET`, `relTime`. Todo en Eastern sin importar el TZ del navegador.
+
+**Por qué:** Bernardo quería ver cuántas llamadas quedan y cachar las que aparecen agendadas pero ya sucedieron sin actualizarse. Accountability antes NO veía eso: solo vigilaba la reschedule cadence (que requiere un cancel/no-show ya marcado), nunca un DC agendado que el closer simplemente no tocó. La hora real no está en el sheet (solo en GHL Calendar) — §15.
+
+**Setup / deploy:** pegar en `Code.gs` los 2 cambios (2 líneas en `getOpportunities` + función `getLastDcAssignedByEmail_` completa) → **Manage deployments → Edit → New version**. Copia `~/Downloads/Code_21DC_Dashboard.gs` sincronizada. **Fase CC pendiente** (§14 item 18).
+
+**Archivos / commits:** index.html · Code.gs (fuera de git) · <hash>
+
+---
+
 ## 2026-08-03 — Autor obligatorio en las notas ("Note by")
 
 **Qué se cambió (frontend `index.html`):**

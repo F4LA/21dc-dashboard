@@ -1291,6 +1291,9 @@
         <div class="info-item" style="grid-column: span 2"><label>History</label><span id="m-history">—</span></div>
       </div>
 
+      <!-- Real call time (Eastern) from GHL Calendar — shown for scheduled calls -->
+      <div id="calltime-section"></div>
+
       <!-- Stage actions -->
       <div class="section-title">Mark stage</div>
       <div class="actions-grid">
@@ -2179,6 +2182,10 @@ async function loadNotesInBackground() {
       p.lastNote = d.lastNote || null;
       p.lastDcAssignedUserId = d.lastDcAssignedUserId || '';
       p.lastDcAssignedUserName = d.lastDcAssignedUserName || '';
+      // Real DC call time (Eastern) from GHL Calendar. Empty until the full
+      // background load lands (the lite first-paint skips the calendar fetch).
+      p.dcCallAt = d.dcCallAt || '';
+      p.dcCallEndAt = d.dcCallEndAt || '';
       // Purchase amount + refund flag from the Mastersheet (first invoice
       // per email). Filled here rather than in the initial lite call so the
       // page-open path stays fast. Analytics revenue math prefers these
@@ -4234,8 +4241,31 @@ function renderAccountability() {
 
   const dennis = getDennisFlags();
   const jackie = getJackieFlags();
+  const dcCalls = getScheduledDcCalls();
 
   document.getElementById('accountability-wrap').innerHTML = `
+    <div class="acc-section">
+      <div class="acc-section-header">
+        <span class="acc-section-title">Discovery Calls — coming up</span>
+        <span class="acc-section-count${dcCalls.upcoming.length === 0 ? ' zero' : ''}">${dcCalls.upcoming.length}</span>
+      </div>
+      <div class="acc-section-desc">DC calls still to happen (real time from GHL Calendar, Eastern). Sorted soonest first.</div>
+      ${dcCalls.upcoming.length === 0
+        ? `<div class="acc-empty">No upcoming Discovery Calls scheduled.</div>`
+        : `<div class="acc-list">${dcCalls.upcoming.map(p => renderCallCard(p, false)).join('')}</div>`}
+    </div>
+
+    <div class="acc-section">
+      <div class="acc-section-header">
+        <span class="acc-section-title">Discovery Calls — happened, not updated</span>
+        <span class="acc-section-count${dcCalls.needsUpdate.length === 0 ? ' zero' : ''}">${dcCalls.needsUpdate.length}</span>
+      </div>
+      <div class="acc-section-desc">Call time passed 1h+ ago (last 7 days) but still marked DC - Scheduled. The closer likely didn't log the outcome.</div>
+      ${dcCalls.needsUpdate.length === 0
+        ? `<div class="acc-empty">✓ Every past Discovery Call has an outcome logged.</div>`
+        : `<div class="acc-list">${dcCalls.needsUpdate.map(p => renderCallCard(p, true)).join('')}</div>`}
+    </div>
+
     <div class="acc-section">
       <div class="acc-section-header">
         <span class="acc-section-title">Dennis — open follow-ups</span>
@@ -4274,6 +4304,50 @@ function renderAccCard({ p, issue, hrs }) {
         <div class="acc-card-issue">${esc(issue)}</div>
       </div>
       <div class="acc-card-time">${fmtDuration(hrs * 3600000)}</div>
+    </div>`;
+}
+
+// Discovery Call schedule (DC phase). Splits DC - Scheduled participants by
+// their real GHL call time: upcoming (still to happen) vs happened-but-not-
+// updated (call ended 1h+ ago yet still marked Scheduled, within a 7-day
+// lookback). dcCallAt/dcCallEndAt arrive via the full background load.
+function getScheduledDcCalls() {
+  const LOOKBACK_MS = 7 * 24 * 3600000;  // how far back "not updated" looks
+  const BUFFER_MS   = 3600000;           // 1h grace after call end
+  const now = Date.now();
+  const upcoming = [], needsUpdate = [];
+  participants.forEach(p => {
+    if (!isActiveCohort(p) || p.isRefunded || p.isInactive || p.isOptedOut) return;
+    if (p.stageName !== 'DC - Scheduled' || !p.dcCallAt) return;
+    const startMs = new Date(p.dcCallAt).getTime();
+    if (isNaN(startMs)) return;
+    const endMs = p.dcCallEndAt ? new Date(p.dcCallEndAt).getTime() : startMs + 60 * 60000;
+    if (endMs + BUFFER_MS < now) {
+      if (startMs >= now - LOOKBACK_MS) needsUpdate.push(p);  // past + still scheduled
+    } else {
+      upcoming.push(p);
+    }
+  });
+  upcoming.sort((a, b) => new Date(a.dcCallAt).getTime() - new Date(b.dcCallAt).getTime());     // soonest first
+  needsUpdate.sort((a, b) => new Date(a.dcCallAt).getTime() - new Date(b.dcCallAt).getTime());  // oldest (most overdue) first
+  return { upcoming, needsUpdate };
+}
+
+function renderCallCard(p, overdue) {
+  const ini = initials(p.name);
+  const clr = nameColor(p.name);
+  const owner = p.lastDcAssignedUserName ? ' · ' + esc(p.lastDcAssignedUserName) : '';
+  const cohortBadge = (hasCrossover() && p.challengeMonthLabel)
+    ? `<span class="cohort-badge">${esc(shortCohortLabel(p.challengeMonthLabel))}</span>`
+    : '';
+  return `
+    <div class="acc-card" onclick="openModal('${p.email}')">
+      <div class="avatar" style="background:${clr}">${ini}</div>
+      <div class="acc-card-info">
+        <div class="acc-card-name">${esc(p.name)}${cohortBadge}</div>
+        <div class="acc-card-issue">DC ${esc(fmtCallTimeET(p.dcCallAt))}${owner}</div>
+      </div>
+      <div class="acc-card-time"${overdue ? ' style="color:#92400e"' : ''}>${esc(relTime(p.dcCallAt))}</div>
     </div>`;
 }
 
@@ -4799,6 +4873,7 @@ async function openModal(emailOrId) {
 
   // Render refund + contextual outreach buttons
   renderManualBookingSection(p);
+  renderCallTimeSection(p);
   renderRefundSection(p);
   renderOutreachSection(p);
   renderRescheduleSection(p);
@@ -5186,6 +5261,30 @@ function teamMemberDropdownHtml(idAttr, members, onChangeAttr) {
       ${sorted.map(m => `<option value="${esc(m.userId)}">${esc(m.name)}</option>`).join('')}
     </select>
   `;
+}
+
+// Real call time (Eastern) from GHL Calendar. DC phase: shown when the
+// participant is in DC - Scheduled. If the call ended over 1h ago and they're
+// still Scheduled, it flags as not-yet-updated (amber).
+function renderCallTimeSection(p) {
+  const wrap = document.getElementById('calltime-section');
+  if (!wrap) return;
+  const stage = p.stageName || '';
+  if (stage === 'DC - Scheduled' && p.dcCallAt) {
+    const endIso  = p.dcCallEndAt || p.dcCallAt;
+    const overdue = (new Date(endIso).getTime() + 3600000) < Date.now();  // ended >1h ago
+    const timeStr = fmtCallTimeET(p.dcCallAt);
+    const rel     = relTime(p.dcCallAt);
+    wrap.innerHTML = overdue
+      ? `<div style="margin-top:14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:11px 13px;font-size:13px;color:#92400e">
+           ⚠ <strong>Discovery Call was ${esc(timeStr)}</strong> (${esc(rel)}) and is still marked Scheduled. If the call happened, mark the outcome.
+         </div>`
+      : `<div style="margin-top:14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:11px 13px;font-size:13px;color:var(--text-primary)">
+           📅 <strong>Discovery Call:</strong> ${esc(timeStr)} <span style="color:var(--text-muted)">(${esc(rel)})</span>
+         </div>`;
+    return;
+  }
+  wrap.innerHTML = '';
 }
 
 function renderRescheduleSection(p) {
@@ -6091,6 +6190,7 @@ function refreshModalContent(p) {
       <span class="stage-dot" style="background:${st.dot}"></span>${esc(p.stageName)}</span>`;
   document.getElementById('m-time').textContent = fmtDuration(p.stageAgeMs);
   renderManualBookingSection(p);
+  renderCallTimeSection(p);
   renderRefundSection(p);
   renderOutreachSection(p);
   renderRescheduleSection(p);
@@ -6219,6 +6319,32 @@ function timeAgo(str) {
 
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// GHL runs on Eastern time. Format a call's ISO timestamp in America/New_York
+// regardless of where the dashboard is opened, so it always reads as ET.
+function fmtCallTimeET(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  try {
+    return d.toLocaleString('en-US', {
+      timeZone: 'America/New_York',
+      weekday: 'short', month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit'
+    }) + ' ET';
+  } catch(_) {
+    return d.toLocaleString('en-US') + ' ET';
+  }
+}
+// "in 3 hours" / "2 hours ago" for a future/past ISO timestamp.
+function relTime(iso) {
+  if (!iso) return '';
+  const ms = new Date(iso).getTime() - Date.now();
+  const abs = Math.abs(ms);
+  const h = Math.round(abs / 3600000), d = Math.round(abs / 86400000);
+  const unit = d >= 1 ? (d + (d === 1 ? ' day' : ' days')) : (h + (h === 1 ? ' hour' : ' hours'));
+  return ms >= 0 ? ('in ' + unit) : (unit + ' ago');
 }
 
 // Strip HTML tags + decode common entities (notes from GHL come as HTML)

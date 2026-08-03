@@ -204,7 +204,9 @@ Router: `setView(view)`. `'queue'` y `'onboarding'` redirigen a `'today'`. Arran
 
 ### 5.3. Accountability (solo Bernardo)
 
-- `renderAccountability()` con dos secciones:
+- `renderAccountability()` con estas secciones:
+  - **"Discovery Calls — coming up"**: participantes en `DC - Scheduled` cuya call **aún no pasa**, con la **hora real de GHL Calendar en Eastern** (`dcCallAt`). Es el "cuántas llamadas quedan por hacer", ordenado por la más próxima. `getScheduledDcCalls().upcoming`.
+  - **"Discovery Calls — happened, not updated"**: en `DC - Scheduled` cuya call **ya terminó hace 1h+** (ventana de 7 días) y siguen en Scheduled → el closer no marcó el resultado. **Llena un hueco:** Accountability antes solo veía la reschedule cadence (que requiere un cancel/no-show ya marcado), nunca un DC agendado que simplemente no se tocó. `getScheduledDcCalls().needsUpdate`. *(CC pendiente para una fase siguiente.)*
   - **"Dennis — open follow-ups"**: reschedule cadence stale 48h+ (DM, Call #1, Call #2, Offer Doc). `getDennisFlags()`.
   - **"Gabi — open follow-ups"**: onboarding outreach stale 48h+ (Login Reachout, Welcome, o CC booking overdue). `getJackieFlags()` (nombre interno legacy = "Jackie", ya no renombrado).
 - Buffer: 48h desde el evento (24h para actuar + 24h antes de que el flag llegue a Bernardo). Filtrado a `isActiveCohort`. Excluye refunded/inactive.
@@ -244,6 +246,7 @@ Router: `setView(view)`. `'queue'` y `'onboarding'` redirigen a `'today'`. Arran
 
 Secciones (de arriba a abajo):
 - **Header**: nombre, stage, tiempo en stage.
+- **Call time** (`renderCallTimeSection`, DC phase): si el participante está en `DC - Scheduled`, muestra la **hora real del Discovery Call en Eastern** (de GHL Calendar, `dcCallAt`). Si la call terminó hace 1h+ y sigue en Scheduled, se pinta ámbar con ⚠ "still marked Scheduled". *(CC pendiente para fase siguiente.)*
 - **Mark stage** (grid de botones → cada uno `markEvent(col)` → POST `recordEvent` → escribe timestamp en la columna homónima del sheet **Participants**, con optimistic UI):
   - `CC Cancelled`, `CC No Show`, `DC Cancelled`, `DC No Show` (rojos/danger)
   - `Didn't Book DC`, `Didn't Purchase` (neutros, span 2)
@@ -329,7 +332,7 @@ El challenge nuevo empieza a vender mientras el anterior aún corre → hay dos 
 
 - `doGet(e)` cases: `testConnection`, `getOpportunities` (param `lite=true` para first-paint rápido), `getContact`, `getConfig`, `getHistorical`, `analyzeChallenge`, `listCalendars`, `getTodayCalls`, `getFreeSlots`, `getCalendarTeamMembers`, `getSpotCount`, `getIntakeMacro`, `findHistorical`.
 - `doPost(e)` cases: `createNote`, `updateChallengeStartDate`, `updateActiveChallengeMonth`, `recordEvent`, `clearEvent`, `archiveChallenge`, `bookAppointment`, `recordHistoricalEvent`.
-- Helpers: `activeChallengeName_`, `challengeMonthLabel_` (meses en **inglés**), `normalizeChallengeMonth_`, `getChallengeCosts_`, `analyzeChallenge_`, `summarizeChallenge_`, `buildAnalysisPrompt_`, `getHistoricalParticipantsByChallenge_`, `computeStageSimple_`, `getCalendarIds_` (`{cc, ccAdmin, dc, fu}`), `listGHLCalendars_`, `getCalendarEventsForRange_`, `getCalendarFreeSlots_(calId, dateStr, userId)`, `getCalendarTeamMembers_`, `createAppointment_(opts)`, `enrichEventsWithEmail_`, `getUserNameMap_`, `resolveUserName_`, `getLastDcAssignedByEmail_` (atribución del closer del DC), `getMastersheetPurchases_` / `processMastersheetTab_`.
+- Helpers: `activeChallengeName_`, `challengeMonthLabel_` (meses en **inglés**), `normalizeChallengeMonth_`, `getChallengeCosts_`, `analyzeChallenge_`, `summarizeChallenge_`, `buildAnalysisPrompt_`, `getHistoricalParticipantsByChallenge_`, `computeStageSimple_`, `getCalendarIds_` (`{cc, ccAdmin, dc, fu}`), `listGHLCalendars_`, `getCalendarEventsForRange_`, `getCalendarFreeSlots_(calId, dateStr, userId)`, `getCalendarTeamMembers_`, `createAppointment_(opts)`, `enrichEventsWithEmail_`, `getUserNameMap_`, `resolveUserName_`, `getLastDcAssignedByEmail_` (atribución del closer del DC; ahora también expone `callAt`/`callEndAt` = hora real del DC en GHL, cache key `:v2`), `getMastersheetPurchases_` / `processMastersheetTab_`.
 - **Cache warmers (triggers):** `warmLastDcCache` (cada 10 min), `warmMastersheetCache` (cada 10 min), `syncPurchaseAmountsToSheet` (cada 1h — copia montos al sheet solo si Purchase marcado y celda vacía; nunca sobrescribe). Instalar una vez con `installWarmCacheTrigger()`.
 
 ### 10.2. `GHL.gs` — API GHL + sheet I/O
@@ -437,6 +440,7 @@ Ver §10.4. El intake form ya **no** se llena en Everfit — ahora es un **Googl
 15. Llenar el tab `Challenge Costs` con números reales por challenge (sin eso, las cards muestran placeholder).
 16. ~~**Fase 2 de Opt-Out/No Response:** alimentar el breakdown de Cancel Recovery al prompt de la AI Analysis.~~ ✅ **Hecho (2026-08-03):** `summarizeChallenge_` + `buildAnalysisPrompt_` actualizados. **Requiere:** pegar los cambios en `Code.gs` + New Version deploy, y que la AI Analysis tenga créditos (TODO #1) para verse. El breakdown ya es visible en la card de Analytics sin la AI.
 17. ~~**Setup requerido:** agregar la columna `Opted Out` a mano en `Participants` y `Historical`.~~ ✅ **Hecho (2026-08-03):** columna `Opted Out` agregada en ambos tabs (columna AN).
+18. **Scheduled Calls — fase CC pendiente:** hoy solo DC (reusa el fetch cacheado/warmed de DC). Falta traer las horas de los **CC** de GHL Calendar (dos calendarios: público + admin override) en la misma ventana, mapear por email, cachear + warmer, y exponer `ccCallAt`/`ccCallEndAt`. Luego replicar en el modal y en Accountability las mismas dos secciones para CC. Requiere editar `Code.gs` + New Version.
 
 ---
 
