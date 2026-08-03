@@ -21,7 +21,7 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 **Setup / deploy:** pegar `GHL.gs` completo → **Manage deployments → Edit → New version**. `GHL.gs` no está en git.
 
-**Archivos / commits:** GHL.gs (fuera de git) · DECISION-LOG.md · <hash>
+**Archivos / commits:** GHL.gs (fuera de git) · DECISION-LOG.md · fc3b60b
 
 ---
 
