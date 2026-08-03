@@ -2186,6 +2186,9 @@ async function loadNotesInBackground() {
       // background load lands (the lite first-paint skips the calendar fetch).
       p.dcCallAt = d.dcCallAt || '';
       p.dcCallEndAt = d.dcCallEndAt || '';
+      p.ccCallAt = d.ccCallAt || '';
+      p.ccCallEndAt = d.ccCallEndAt || '';
+      p.ccCallAssignedUserName = d.ccCallAssignedUserName || '';
       // Purchase amount + refund flag from the Mastersheet (first invoice
       // per email). Filled here rather than in the initial lite call so the
       // page-open path stays fast. Analytics revenue math prefers these
@@ -4241,29 +4244,29 @@ function renderAccountability() {
 
   const dennis = getDennisFlags();
   const jackie = getJackieFlags();
-  const dcCalls = getScheduledDcCalls();
+  const calls = getAllScheduledCalls();
 
   document.getElementById('accountability-wrap').innerHTML = `
     <div class="acc-section">
       <div class="acc-section-header">
-        <span class="acc-section-title">Discovery Calls — coming up</span>
-        <span class="acc-section-count${dcCalls.upcoming.length === 0 ? ' zero' : ''}">${dcCalls.upcoming.length}</span>
+        <span class="acc-section-title">Calls — coming up</span>
+        <span class="acc-section-count${calls.upcoming.length === 0 ? ' zero' : ''}">${calls.upcoming.length}</span>
       </div>
-      <div class="acc-section-desc">DC calls still to happen (real time from GHL Calendar, Eastern). Sorted soonest first.</div>
-      ${dcCalls.upcoming.length === 0
-        ? `<div class="acc-empty">No upcoming Discovery Calls scheduled.</div>`
-        : `<div class="acc-list">${dcCalls.upcoming.map(p => renderCallCard(p, false)).join('')}</div>`}
+      <div class="acc-section-desc">Clarity + Discovery Calls still to happen (real time from GHL Calendar, Eastern). Sorted soonest first.</div>
+      ${calls.upcoming.length === 0
+        ? `<div class="acc-empty">No upcoming calls scheduled.</div>`
+        : `<div class="acc-list">${calls.upcoming.map(it => renderCallCard(it, false)).join('')}</div>`}
     </div>
 
     <div class="acc-section">
       <div class="acc-section-header">
-        <span class="acc-section-title">Discovery Calls — happened, not updated</span>
-        <span class="acc-section-count${dcCalls.needsUpdate.length === 0 ? ' zero' : ''}">${dcCalls.needsUpdate.length}</span>
+        <span class="acc-section-title">Calls — happened, not updated</span>
+        <span class="acc-section-count${calls.needsUpdate.length === 0 ? ' zero' : ''}">${calls.needsUpdate.length}</span>
       </div>
-      <div class="acc-section-desc">Call time passed 1h+ ago (last 7 days) but still marked DC - Scheduled. The closer likely didn't log the outcome.</div>
-      ${dcCalls.needsUpdate.length === 0
-        ? `<div class="acc-empty">✓ Every past Discovery Call has an outcome logged.</div>`
-        : `<div class="acc-list">${dcCalls.needsUpdate.map(p => renderCallCard(p, true)).join('')}</div>`}
+      <div class="acc-section-desc">Call time passed 1h+ ago (last 7 days) but still marked Scheduled. The closer likely didn't log the outcome.</div>
+      ${calls.needsUpdate.length === 0
+        ? `<div class="acc-empty">✓ Every past call has an outcome logged.</div>`
+        : `<div class="acc-list">${calls.needsUpdate.map(it => renderCallCard(it, true)).join('')}</div>`}
     </div>
 
     <div class="acc-section">
@@ -4307,36 +4310,51 @@ function renderAccCard({ p, issue, hrs }) {
     </div>`;
 }
 
-// Discovery Call schedule (DC phase). Splits DC - Scheduled participants by
-// their real GHL call time: upcoming (still to happen) vs happened-but-not-
-// updated (call ended 1h+ ago yet still marked Scheduled, within a 7-day
-// lookback). dcCallAt/dcCallEndAt arrive via the full background load.
-function getScheduledDcCalls() {
+// Scheduled-call schedule for a given call type (CC or DC). Splits the
+// participants in that "…Scheduled" stage by their real GHL call time:
+// upcoming (still to happen) vs happened-but-not-updated (call ended 1h+ ago
+// yet still Scheduled, within a 7-day lookback). Call times arrive via the
+// full background load.
+function getScheduledCalls(callType) {
+  const cfg = CALL_TYPES[callType];
   const LOOKBACK_MS = 7 * 24 * 3600000;  // how far back "not updated" looks
-  const BUFFER_MS   = 3600000;           // 1h grace after call end
   const now = Date.now();
   const upcoming = [], needsUpdate = [];
   participants.forEach(p => {
     if (!isActiveCohort(p) || p.isRefunded || p.isInactive || p.isOptedOut) return;
-    if (p.stageName !== 'DC - Scheduled' || !p.dcCallAt) return;
-    const startMs = new Date(p.dcCallAt).getTime();
+    if (p.stageName !== cfg.stage || !p[cfg.at]) return;
+    const startMs = new Date(p[cfg.at]).getTime();
     if (isNaN(startMs)) return;
-    const endMs = p.dcCallEndAt ? new Date(p.dcCallEndAt).getTime() : startMs + 60 * 60000;
-    if (endMs + BUFFER_MS < now) {
+    const endMs = p[cfg.end] ? new Date(p[cfg.end]).getTime() : startMs + 60 * 60000;
+    if (endMs + CALL_BUFFER_MS < now) {
       if (startMs >= now - LOOKBACK_MS) needsUpdate.push(p);  // past + still scheduled
     } else {
       upcoming.push(p);
     }
   });
-  upcoming.sort((a, b) => new Date(a.dcCallAt).getTime() - new Date(b.dcCallAt).getTime());     // soonest first
-  needsUpdate.sort((a, b) => new Date(a.dcCallAt).getTime() - new Date(b.dcCallAt).getTime());  // oldest (most overdue) first
   return { upcoming, needsUpdate };
 }
 
-function renderCallCard(p, overdue) {
+// Merges CC + DC into two time-sorted lists, tagging each item with its type.
+function getAllScheduledCalls() {
+  const out = { upcoming: [], needsUpdate: [] };
+  ['CC', 'DC'].forEach(t => {
+    const r = getScheduledCalls(t);
+    r.upcoming.forEach(p => out.upcoming.push({ p, t }));
+    r.needsUpdate.forEach(p => out.needsUpdate.push({ p, t }));
+  });
+  const at = x => new Date(x.p[CALL_TYPES[x.t].at]).getTime();
+  out.upcoming.sort((a, b) => at(a) - at(b));      // soonest first
+  out.needsUpdate.sort((a, b) => at(a) - at(b));   // oldest (most overdue) first
+  return out;
+}
+
+function renderCallCard(item, overdue) {
+  const p = item.p, cfg = CALL_TYPES[item.t];
   const ini = initials(p.name);
   const clr = nameColor(p.name);
-  const owner = p.lastDcAssignedUserName ? ' · ' + esc(p.lastDcAssignedUserName) : '';
+  const ownerName = p[cfg.owner];
+  const owner = ownerName ? ' · ' + esc(ownerName) : '';
   const cohortBadge = (hasCrossover() && p.challengeMonthLabel)
     ? `<span class="cohort-badge">${esc(shortCohortLabel(p.challengeMonthLabel))}</span>`
     : '';
@@ -4345,9 +4363,9 @@ function renderCallCard(p, overdue) {
       <div class="avatar" style="background:${clr}">${ini}</div>
       <div class="acc-card-info">
         <div class="acc-card-name">${esc(p.name)}${cohortBadge}</div>
-        <div class="acc-card-issue">DC ${esc(fmtCallTimeET(p.dcCallAt))}${owner}</div>
+        <div class="acc-card-issue">${esc(item.t)} ${esc(fmtCallTimeET(p[cfg.at]))}${owner}</div>
       </div>
-      <div class="acc-card-time"${overdue ? ' style="color:#92400e"' : ''}>${esc(relTime(p.dcCallAt))}</div>
+      <div class="acc-card-time"${overdue ? ' style="color:#92400e"' : ''}>${esc(relTime(p[cfg.at]))}</div>
     </div>`;
 }
 
@@ -5263,28 +5281,42 @@ function teamMemberDropdownHtml(idAttr, members, onChangeAttr) {
   `;
 }
 
-// Real call time (Eastern) from GHL Calendar. DC phase: shown when the
-// participant is in DC - Scheduled. If the call ended over 1h ago and they're
-// still Scheduled, it flags as not-yet-updated (amber).
+// Real call time (Eastern) from GHL Calendar, for both CC and DC. The sheet's
+// "…Scheduled" columns only record when the booking was logged, not the call
+// time — the real time lives only in GHL Calendar (dc/ccCallAt).
+const CALL_TYPES = {
+  CC: { stage: 'CC - Scheduled', at: 'ccCallAt', end: 'ccCallEndAt', owner: 'ccCallAssignedUserName', label: 'Clarity Call' },
+  DC: { stage: 'DC - Scheduled', at: 'dcCallAt', end: 'dcCallEndAt', owner: 'lastDcAssignedUserName', label: 'Discovery Call' }
+};
+const CALL_BUFFER_MS = 3600000;  // 1h grace after the call ends before "not updated"
+
+// True if the call already ended more than the grace window ago.
+function callIsOverdue(p, cfg) {
+  const startMs = new Date(p[cfg.at]).getTime();
+  if (isNaN(startMs)) return false;
+  const endMs = p[cfg.end] ? new Date(p[cfg.end]).getTime() : startMs + 60 * 60000;
+  return (endMs + CALL_BUFFER_MS) < Date.now();
+}
+
+// Modal section: shows the real call time when the participant is in CC/DC
+// Scheduled. Amber ⚠ if the call ended 1h+ ago and they're still Scheduled.
 function renderCallTimeSection(p) {
   const wrap = document.getElementById('calltime-section');
   if (!wrap) return;
   const stage = p.stageName || '';
-  if (stage === 'DC - Scheduled' && p.dcCallAt) {
-    const endIso  = p.dcCallEndAt || p.dcCallAt;
-    const overdue = (new Date(endIso).getTime() + 3600000) < Date.now();  // ended >1h ago
-    const timeStr = fmtCallTimeET(p.dcCallAt);
-    const rel     = relTime(p.dcCallAt);
-    wrap.innerHTML = overdue
-      ? `<div style="margin-top:14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:11px 13px;font-size:13px;color:#92400e">
-           ⚠ <strong>Discovery Call was ${esc(timeStr)}</strong> (${esc(rel)}) and is still marked Scheduled. If the call happened, mark the outcome.
-         </div>`
-      : `<div style="margin-top:14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:11px 13px;font-size:13px;color:var(--text-primary)">
-           📅 <strong>Discovery Call:</strong> ${esc(timeStr)} <span style="color:var(--text-muted)">(${esc(rel)})</span>
-         </div>`;
-    return;
-  }
-  wrap.innerHTML = '';
+  let cfg = null;
+  if (stage === CALL_TYPES.CC.stage && p.ccCallAt) cfg = CALL_TYPES.CC;
+  else if (stage === CALL_TYPES.DC.stage && p.dcCallAt) cfg = CALL_TYPES.DC;
+  if (!cfg) { wrap.innerHTML = ''; return; }
+  const timeStr = fmtCallTimeET(p[cfg.at]);
+  const rel     = relTime(p[cfg.at]);
+  wrap.innerHTML = callIsOverdue(p, cfg)
+    ? `<div style="margin-top:14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:11px 13px;font-size:13px;color:#92400e">
+         ⚠ <strong>${esc(cfg.label)} was ${esc(timeStr)}</strong> (${esc(rel)}) and is still marked Scheduled. If the call happened, mark the outcome.
+       </div>`
+    : `<div style="margin-top:14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:11px 13px;font-size:13px;color:var(--text-primary)">
+         📅 <strong>${esc(cfg.label)}:</strong> ${esc(timeStr)} <span style="color:var(--text-muted)">(${esc(rel)})</span>
+       </div>`;
 }
 
 function renderRescheduleSection(p) {

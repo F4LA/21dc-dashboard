@@ -9,6 +9,20 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 ---
 
+## 2026-08-03 — Scheduled Calls: fase CC (completa CC + DC)
+
+**Qué se cambió (frontend `index.html` + backend `Code.gs`):**
+- **Backend:** nueva `getCcCallTimesByEmail_` — lee los **dos** calendarios de CC (público + admin override), dedup por event id, mapea email → `{callAt, callEndAt, assignedUser}` (ventana 90d atrás + 30d adelante), cache `ccCallTimesByEmail:v1`. Se calienta **dentro de `warmLastDcCache`** (no requiere trigger nuevo). `getOpportunities` expone `ccCallAt`/`ccCallEndAt`/`ccCallAssignedUserName` (solo full).
+- **Frontend:** generalizado a CC+DC con una config `CALL_TYPES`. `renderCallTimeSection` muestra la hora del CC o DC según el stage. Accountability: las secciones ahora son **"Calls — coming up"** y **"Calls — happened, not updated"** (CC+DC mezcladas, ordenadas por hora, cada card etiqueta CC/DC). Helpers `getScheduledCalls(type)`, `getAllScheduledCalls`.
+
+**Por qué:** completa el pedido original (CC + DC). Se hizo por fases: DC primero (casi gratis, reusaba el fetch de DC), CC después (agrega un fetch cacheado/warmed de los dos calendarios de CC).
+
+**Setup / deploy:** pegar `Code.gs` completo → **Manage deployments → Edit → New version**. No requiere trigger nuevo (el warmer de 10 min ya calienta CC). Copia `~/Downloads/Code_21DC_Dashboard.gs` sincronizada.
+
+**Archivos / commits:** index.html · Code.gs (fuera de git) · <hash>
+
+---
+
 ## 2026-08-03 — Scheduled Calls: hora real del DC + "not updated" (fase DC)
 
 **Qué se cambió (frontend `index.html` + backend `Code.gs`):**
