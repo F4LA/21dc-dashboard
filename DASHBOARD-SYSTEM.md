@@ -116,7 +116,8 @@ Herramienta interna de operaciones para el **21-Day Challenge** de Strong Standa
 - Onboarding (Gabi): `Login to Everfit`, `Register Kickoff`, `Login Reachout Sent` (= Reminder #1), `Login Reachout 2 Sent` (= Reminder #2), `Welcome Message Sent`, `Training Assigned`, `Calories Assigned`, `Day 2 DM Sent`, `Day 4 Call #1`, `Day 5 Call #2` (columna viva pero **fuera de UI**), `Day 6 Offer Doc Sent` (UI lo llama "Day 19 Offer Doc"), `Intake Reminder 1 Sent`, `Intake Reminder 2 Sent`.
 - Reschedule cadence (Deniz): `Reschedule DM Sent`, `Reschedule Call #1`, `Reschedule Call #2`, `Reschedule Offer Doc`.
 - Lifecycle de ventas (timestamps): `CC Scheduled`, `CC Cancelled`, `CC No Show`, `DC Scheduled`, `DC Cancelled`, `DC No Show`, `FU Scheduled`, `Didn't Book DC`, `Didn't Purchase`, `Purchase 101`, `Purchase 101 Amount`, `Purchase GC`, `Purchase GC Amount`.
-- Flags: `Refunded`, `Marked Inactive`, `Challenge Month` (columna AJ, tipo Date `M/1/YYYY`, la puebla la automatización de Miguel desde el custom field GHL `Last Challenge Date`).
+- Flags: `Refunded`, `Marked Inactive`, `Opted Out`, `Challenge Month` (columna AJ, tipo Date `M/1/YYYY`, la puebla la automatización de Miguel desde el custom field GHL `Last Challenge Date`).
+  - **`Opted Out`** la escribe el dashboard (botón Opt-Out del modal). **Agregar la columna a mano en `Participants` y `Historical`** — `recordEvent_` falla si no existe (no requiere redeploy).
 
 `Historical` = mismas columnas + una columna `Challenge` (formato `YYYY-MM`).
 `Challenge Costs` = `Challenge` | `Ad Cost` | `Affiliate Cost` | `Other Costs` | `Notes`.
@@ -137,6 +138,15 @@ No hay columna "stage". Se calcula mirando **qué timestamps existen** en la fil
 **Por qué el desempate cronológico:** un reschedule escribe `CC Scheduled` **después** de `CC Cancelled`; con precedencia fija el participante se quedaba pegado en "CC - Cancelled" (bug de Cody Blakley). Con "gana el más reciente", vuelve a `CC - Scheduled`. `Didn't Book DC` se ubica **debajo** de `DC Scheduled` para permitir "revival": si el participante luego agenda DC, sube solo.
 
 **Stages (nombres visibles):** `Participant`, `CC - Scheduled`, `CC - Cancelled`, `CC - No Show`, `Didn't Book DC`, `DC - Scheduled`, `DC - Cancelled`, `DC - No Show`, `FU - Scheduled`, `Didn't Purchase`, `Purchase 101`, `Purchase GC`.
+
+### 4.2.1. Disposiciones de cancelación: Opt-Out y No Response
+
+**No son stages** — son flags que se ponen **encima** de un stage de cancel/no-show (`computeStage_` no los conoce). Sirven para cerrar leads que ya no vale perseguir con la reschedule cadence, **sin sacarlos del funnel de Analytics** (a diferencia de `Refunded`/`Marked Inactive`, que sí se excluyen). Fuente única en el frontend: `recomputeDisposition(p)` → `p.isOptedOut`, `p.isNoResponse`.
+
+- **Opt-Out** (`p.isOptedOut`): explícito, **solo Discovery Call**. Lo marca el closer en el modal cuando el lead canceló el DC porque **no quiere continuar** (no es fit / no le alcanza el budget → se auto-descalificó con los videos-tarea pre-DC). Escribe la columna `Opted Out` y **exige una nota de razón** (guardada en GHL como `[Opt-Out] <razón>`). Saca al lead de Action Queue + Accountability y oculta el botón de Reschedule.
+- **No Response** (`p.isNoResponse`): **derivado, sin columna ni botón**. Es verdadero cuando `Reschedule Offer Doc` está marcado **y** el lead sigue en un stage de cancel/no-show. Representa "se corrió toda la reschedule cadence (Offer Doc enviado) y nunca reagendó". **Se auto-corrige:** si reagenda, el stage sube a `*-Scheduled` y el flag desaparece solo. Opt-Out tiene precedencia sobre No Response.
+- **Por qué el CC no tiene Opt-Out:** el CC es pre-oferta; una cancelación siempre vale reagendar. Solo el DC tiene la compuerta de calificación (videos pre-DC) que produce auto-descalificaciones legítimas.
+- **Por qué No Response no necesita botón:** la regla operativa es "si no responde, siempre se manda el Offer Doc", así que marcar el Offer Doc (último paso de la cadencia) **es** la señal de No Response. El código ya cerraba el caso ahí (`if (sd['Reschedule Offer Doc']) return`); la disposición solo lo hace visible (badge) y lo cuenta en Analytics.
 
 ### 4.3. Filtrado del challenge activo
 
@@ -162,9 +172,9 @@ Router: `setView(view)`. `'queue'` y `'onboarding'` redirigen a `'today'`. Arran
 
 ### 5.1. Tracker (Challenge Tracker)
 
-- Tabla de todos los participantes del cohort activo: nombre, stage (badge de color), tiempo en stage, indicadores Everfit login / Kickoff, badges de Refunded / Inactive / refund-por-producto.
+- Tabla de todos los participantes del cohort activo: nombre, stage (badge de color), tiempo en stage, indicadores Everfit login / Kickoff, badges de Refunded / Inactive / **Opted Out** (morado) / **No Response** (ámbar) / refund-por-producto. Las filas Opted Out y No Response se muestran atenuadas (resueltas).
 - **Stats arriba** (6 tarjetas, solo cohort activo): `s-total`, `s-participant`, `s-cc`, `s-dc`, `s-purchase`, `s-conv` ("CC → DC Conv.").
-- **Filter chips** (solo cohort activo, salvo "All" que muestra todos para renderizar la sección Incoming): All / No CC / CC Scheduled / CC Issues / Didn't Book DC / DC Scheduled / DC Issues / FU Scheduled / Inactive / etc. Los chips solo aparecen si `count > 0`.
+- **Filter chips** (solo cohort activo, salvo "All" que muestra todos para renderizar la sección Incoming): All / No CC / CC Scheduled / CC Issues / Didn't Book DC / DC Scheduled / DC Issues / FU Scheduled / Inactive / **Opted Out** / **No Response** / etc. Los chips solo aparecen si `count > 0`. Los chips "CC Issues"/"DC Issues" **excluyen** Opted Out y No Response (ya no son worklist pendiente).
 - **Búsqueda** por nombre/email (case-insensitive).
 - **Crossover:** la tabla se parte en "Active Challenge · [mes]" + secciones "Incoming · [mes]" (header ámbar). Badge de cohort (JUN/JUL) junto al nombre solo durante crossover.
 - Click en una fila → **modal del participante** (ver §6).
@@ -205,6 +215,7 @@ Router: `setView(view)`. `'queue'` y `'onboarding'` redirigen a `'today'`. Arran
 `renderAnalytics()` + `computeFunnel()` (solo cohort activo, excluye inactive/refunded). Cards:
 - **Funnel** en tiempo real: Participantes → Booked CC → Attended CC → Booked DC → Attended DC → Purchase, con % en cada transición.
   - "Attended CC" incluye `Didn't Book DC`, `DC Scheduled`, `FU Scheduled` y terminales de DC. "Attended DC" = `Didn't Purchase` / `Purchase 101` / `Purchase GC` / `FU Scheduled`.
+- **Cancel Recovery**: de todos los que **alguna vez** cancelaron/no-show un CC/DC (por presencia de timestamp, no por stage actual): Recuperados (reagendaron) / Opted out / No response / Aún en cadencia. Excluye refunded+inactive; el resto **sí cuenta en el funnel**. Solo aparece si hubo ≥1 cancel/no-show.
 - **Revenue**: challenge-net + montos 1-on-1 y GC (del **Mastersheet**). Filas rojas de refunds por producto ("1-on-1 refunds · N", "GC refunds · N") que restan.
 - **Source Breakdown**: por fuente (`renderSourceRows`). Afiliados identificados por `Source`; rate uniforme **$97/referral**.
 - **Costs & Profitability**: Ad cost, Affiliate cost, Other costs (del tab Challenge Costs), **coach payouts 1-on-1 y GC** (payout mensual × duración de contrato, solo clientes no-refunded, del Mastersheet), Total costs, **Net profit** (aquí mismo, junto a costos, a propósito). CACs: **Blended CAC** = `(ad+affiliate)/net participants`; **Paid Ads CAC** = `ad/paid-source participants` (sources `meta ads`, `ads`, `manychat ads`).
@@ -242,6 +253,9 @@ Secciones (de arriba a abajo):
   - **📅 Book DC now** (verde): solo en `CC - Scheduled`.
   - **📅 Book Follow-Up Call** (morado): solo en `DC - Scheduled` + FU calendar configurado. Al bookear escribe también `FU Scheduled` en el sheet y el stage pasa a `FU - Scheduled` (esconde el botón).
   - Todos abren un **slot picker inline** (fetch `getFreeSlots`), con **selector dinámico "Book with"** (dropdown de team member; aparece solo si el calendar tiene 2+ personas; default "Any (next available)"; filtra slots por userId). Confirmar → POST `bookAppointment`.
+- **Opt-Out / No Response** (`renderOptedOutSection`, aparece bajo el botón de Reschedule):
+  - **Opt-Out** (solo `DC - Cancelled` / `DC - No Show`, no refunded/inactive/ya-opted-out): botón `⊘ Opt-Out` (morado) → `markOptedOut()` pide una **razón obligatoria** (`prompt`), la guarda como nota en GHL (`[Opt-Out] <razón>`) **y** escribe la columna `Opted Out` vía `recordEvent`. Si ya está opted out: banner + "Undo" (`clearOptedOut()`).
+  - **No Response**: banner ámbar read-only cuando `p.isNoResponse` (derivado). Sin botón. En un DC no-response se muestran ambos (el banner + el botón Opt-Out).
 - **"Add note"** → POST `createNote` → **crea nota en el contacto de GHL** (`/contacts/{id}/notes`). No toca el sheet.
 - **Notes history**: historial de notas cargado de GHL.
 - **"More options"** (grupo colapsable, default cerrado — acciones poco frecuentes):
@@ -266,6 +280,7 @@ Secciones (de arriba a abajo):
 | "Copy message" / "Copy reminder" / "Copy macros" | `copyOnboardingMessage` / `copyIntakeReminder` / `copyMacros` | **Nada** (solo clipboard) |
 | Mark Refunded / Undo | `markRefunded` / `undoRefund` | **Sheet Participants** (`Refunded`) |
 | Mark Inactive / Undo | `markInactive` / `clearInactive` → `recordEvent`/`clearEvent` | **Sheet Participants** (`Marked Inactive`) |
+| Opt-Out / Undo (DC) | `markOptedOut` / `clearOptedOut` → `createNote` + `recordEvent`/`clearEvent` | **GHL** (nota `[Opt-Out]`) **+ Sheet Participants** (`Opted Out`) |
 | Add note | `saveNote` → `createNote` | **GHL** (nota en contacto) |
 | Reschedule CC/DC, Book DC now, Book FU, Book CC (Day 4) | `confirmReschedule`/`confirmBookDc`/`confirmFollowUp`/`confirmDay4Book` → `bookAppointment` | **GHL Calendar** (+ sheet `FU Scheduled` solo para FU) |
 | Update Past Challenge outcomes | `recordExternal` → `recordHistoricalEvent` | **Sheet Historical** |
@@ -419,6 +434,8 @@ Ver §10.4. El intake form ya **no** se llena en Everfit — ahora es un **Googl
 13. Considerar revocar el PIT viejo de GHL cuando todo esté validado.
 14. `computeStageLocal` (frontend) diverge levemente de `computeStage_` (backend) — mantenerlos en sync al tocar la lógica de stage.
 15. Llenar el tab `Challenge Costs` con números reales por challenge (sin eso, las cards muestran placeholder).
+16. **Fase 2 de Opt-Out/No Response:** alimentar el breakdown de Cancel Recovery (cancelled → recovered/opted-out/no-response) al prompt de la AI Analysis (`summarizeChallenge_` + `buildAnalysisPrompt_` en el backend). Diferido: toca los `.gs` (riesgo de clobber, no están en git) y la AI Analysis está rota por créditos (TODO #1). El breakdown ya es visible en la card de Analytics sin la AI.
+17. **Setup requerido:** agregar la columna `Opted Out` a mano en `Participants` y `Historical` (ver §4.1). Hasta entonces, el botón Opt-Out falla al guardar.
 
 ---
 

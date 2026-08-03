@@ -9,6 +9,27 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 ---
 
+## 2026-08-03 — Opt-Out + No Response para cancelaciones que no valen reschedule
+
+**Qué se cambió (frontend `index.html`):**
+- Nueva disposición **Opt-Out** para el **Discovery Call**: botón en el modal (solo en `DC - Cancelled` / `DC - No Show`) que marca la columna **`Opted Out`** y **exige una nota de razón** (se guarda en GHL como `[Opt-Out] <razón>`). Saca al lead de la reschedule cadence (Action Queue) y de Accountability. Oculta el botón de Reschedule.
+- Nueva disposición **No Response** (derivada, sin botón ni columna nueva): se calcula como *`Reschedule Offer Doc` marcado + sigue en un stage de cancel/no-show*. Se auto-corrige: si el lead reagenda, el stage sube a `*-Scheduled` y el tag desaparece solo. Opt-Out tiene precedencia.
+- **Tracker:** badges "Opted Out" (morado) y "No Response" (ámbar) + dos chips nuevos. Ambas disposiciones se excluyen de los chips "CC Issues"/"DC Issues" (dejan de ser worklist pendiente).
+- **Analytics:** nueva card **"Cancel Recovery"** — de los que cancelaron/no-show: recuperados (reagendaron) / opted out / no response / aún en cadencia. **Se quedan DENTRO del funnel** (a diferencia de Refunded/Inactive): bookearon pero no convirtieron, es un resultado real.
+- Helper `recomputeDisposition(p)` (fuente única de `isOptedOut` / `isNoResponse`), usado por `enrich`, `markOptedOut`, `clearOptedOut`.
+
+**Requisito de setup (Bernardo, una vez):** agregar manualmente la columna **`Opted Out`** en los tabs **`Participants` y `Historical`** del Participant Tracking Sheet. `recordEvent_` lanza error si la columna no existe. Agregar columnas no requiere redeploy del backend.
+
+**Pendiente (Fase 2, diferida):** alimentar el breakdown de Cancel Recovery al prompt de la AI Analysis (`summarizeChallenge_` / `buildAnalysisPrompt_` en el backend). Diferido porque toca los `.gs` (no están en git, riesgo de clobber) y porque la AI Analysis está rota por créditos de Anthropic (TODO #1) — el breakdown ya es visible en la card de Analytics sin la AI.
+
+**Por qué:**
+- El dashboard trataba todo `Cancelled/No Show` como "persíguelo para reagendar". Cuando alguien cancela porque se auto-descalificó (no es fit / budget), perseguirlo desperdicia esfuerzo del closer y contamina los flags de Accountability con leads incerrables. Opt-Out cierra ese caso; No Response hace visible (y permite cerrar) el ghost tras la cadencia completa.
+- CC no lleva Opt-Out: es pre-oferta, una cancelación siempre vale reagendar (decisión de Bernardo). Solo el DC tiene la compuerta de calificación (videos pre-DC) que produce auto-descalificaciones.
+
+**Archivos / commits:** index.html · b6df069
+
+---
+
 ## 2026-08-03 — Se establece el sistema de documentación viva
 
 **Qué se cambió:**

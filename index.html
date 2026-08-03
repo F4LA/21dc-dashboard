@@ -1301,6 +1301,10 @@
       <!-- Reschedule (Fase 3) — visible when stage is Cancelled/No Show -->
       <div id="reschedule-section"></div>
 
+      <!-- Opt-Out / No Response disposition — visible on DC cancel/no-show (Opt-Out button)
+           or when the full reschedule cadence ran with no rebook (No Response banner) -->
+      <div id="optedout-section"></div>
+
       <!-- Book Discovery Call — visible when stage is CC - Scheduled (Deniz books during the CC) -->
       <div id="book-dc-section"></div>
 
@@ -1383,6 +1387,8 @@ const FILTERS = [
   { id:'bought',      label:'Purchases',     stages:['Purchase 101','Purchase GC'] },
   { id:'refunded',    label:'Refunded',      stages: null, refundedOnly: true },
   { id:'inactive',    label:'Inactive',      stages: null, inactiveOnly: true },
+  { id:'opted_out',   label:'Opted Out',     stages: null, optedOutOnly: true },
+  { id:'no_response', label:'No Response',   stages: null, noResponseOnly: true },
 ];
 
 // ── State ─────────────────────────────────────────────────
@@ -1844,13 +1850,13 @@ const ACTION_TO_TEMPLATE = {
 function getDennisFlags() {
   const flags = [];
   participants.forEach(p => {
-    if (p.isRefunded || p.isInactive) return;
+    if (p.isRefunded || p.isInactive || p.isOptedOut) return;
     const sd    = p.sheetData || {};
     const hrs   = (p.stageAgeMs || 0) / 3600000;
     const stage = p.stageName;
 
     if (!['CC - Cancelled', 'CC - No Show', 'DC - Cancelled', 'DC - No Show'].includes(stage)) return;
-    if (sd['Reschedule Offer Doc']) return;  // case closed
+    if (sd['Reschedule Offer Doc']) return;  // case closed (Offer Doc sent → No Response, auto-derived)
 
     // Latest outreach action
     const outreachCols = ['Reschedule DM Sent', 'Reschedule Call #1', 'Reschedule Call #2'];
@@ -1995,7 +2001,8 @@ function suggestedAction(p) {
     return null;
   }
 
-  if (sd['Reschedule Offer Doc']) return null;  // case closed
+  if (p.isOptedOut) return null;                // self-disqualified — stop chasing
+  if (sd['Reschedule Offer Doc']) return null;  // case closed (Offer Doc sent → No Response)
 
   if (!sd['Reschedule DM Sent']) {
     return { label: 'Send Reschedule DM', tone: hrs > 48 ? 'late' : '' };
@@ -2026,7 +2033,7 @@ function getActionQueue() {
   // incoming-cohort buyer who cancels an early-booked CC would otherwise
   // land here even though the reschedule target lives in their own cohort.
   return participants
-    .filter(p => isActiveCohort(p) && !p.isRefunded && !p.isInactive)
+    .filter(p => isActiveCohort(p) && !p.isRefunded && !p.isInactive && !p.isOptedOut)
     .map(p => ({ p, action: suggestedAction(p) }))
     .filter(x => x.action !== null)
     .sort((a, b) => b.p.stageAgeMs - a.p.stageAgeMs);
@@ -2199,7 +2206,28 @@ function enrich(p) {
   p.kickoffRegistrado = isValidLoginDate(p.sheetData && p.sheetData['Register Kickoff']);
   p.isRefunded        = !!(p.sheetData && p.sheetData['Refunded']);
   p.isInactive        = !!(p.sheetData && p.sheetData['Marked Inactive']);
+  recomputeDisposition(p);
   return p;
+}
+
+// Opt-Out / No Response dispositions for cancel/no-show leads. Both remove the
+// lead from the reschedule cadence but keep it INSIDE the analytics funnel
+// (unlike Refunded/Inactive) — they booked but didn't convert, which is a real
+// funnel outcome.
+//   • Opted Out = explicit self-disqualification (DC only). Stored in the
+//     'Opted Out' column, written by Deniz with a mandatory reason note.
+//   • No Response = DERIVED, not stored: the full reschedule cadence ran (the
+//     'Reschedule Offer Doc' step is marked) and the lead never rebooked, so
+//     they're still sitting in a cancel/no-show stage. If they later rebook,
+//     stageName flips to a *-Scheduled stage and this clears automatically.
+//     Opt-Out takes precedence over No Response.
+const DISPO_CANCEL_STAGES = ['CC - Cancelled', 'CC - No Show', 'DC - Cancelled', 'DC - No Show'];
+function recomputeDisposition(p) {
+  const sd = p.sheetData || {};
+  p.isOptedOut   = !!sd['Opted Out'];
+  p.isNoResponse = !p.isOptedOut &&
+                   !!sd['Reschedule Offer Doc'] &&
+                   DISPO_CANCEL_STAGES.indexOf(p.stageName) !== -1;
 }
 
 // Returns true if the given value is a valid date >= 2020.
@@ -2306,10 +2334,12 @@ function renderFilters() {
   const activeOnly = participants.filter(isActiveCohort);
   document.getElementById('filter-bar').innerHTML = FILTERS.map(f => {
     let count;
-    if (f.refundedOnly)      count = activeOnly.filter(p => p.isRefunded).length;
-    else if (f.inactiveOnly) count = activeOnly.filter(p => p.isInactive && !p.isRefunded).length;
-    else if (f.stages)       count = activeOnly.filter(p => f.stages.includes(p.stageName) && !p.isRefunded && !p.isInactive).length;
-    else                     count = participants.length;
+    if (f.refundedOnly)         count = activeOnly.filter(p => p.isRefunded).length;
+    else if (f.inactiveOnly)    count = activeOnly.filter(p => p.isInactive && !p.isRefunded).length;
+    else if (f.optedOutOnly)    count = activeOnly.filter(p => p.isOptedOut && !p.isRefunded && !p.isInactive).length;
+    else if (f.noResponseOnly)  count = activeOnly.filter(p => p.isNoResponse && !p.isRefunded && !p.isInactive).length;
+    else if (f.stages)          count = activeOnly.filter(p => f.stages.includes(p.stageName) && !p.isRefunded && !p.isInactive && !p.isOptedOut && !p.isNoResponse).length;
+    else                        count = participants.length;
     if (count === 0 && f.id !== 'all') return '';
     return `<button class="filter-chip${activeFilter===f.id?' active':''}"
       onclick="setFilter('${f.id}')">${f.label}<span class="filter-count">${count}</span></button>`;
@@ -2366,8 +2396,12 @@ function getFiltered() {
     list = activeOnly.filter(p => p.isRefunded);
   } else if (f && f.inactiveOnly) {
     list = activeOnly.filter(p => p.isInactive && !p.isRefunded);
+  } else if (f && f.optedOutOnly) {
+    list = activeOnly.filter(p => p.isOptedOut && !p.isRefunded && !p.isInactive);
+  } else if (f && f.noResponseOnly) {
+    list = activeOnly.filter(p => p.isNoResponse && !p.isRefunded && !p.isInactive);
   } else if (f && f.stages) {
-    list = activeOnly.filter(p => f.stages.includes(p.stageName) && !p.isRefunded && !p.isInactive);
+    list = activeOnly.filter(p => f.stages.includes(p.stageName) && !p.isRefunded && !p.isInactive && !p.isOptedOut && !p.isNoResponse);
   } else {
     // 'all' filter still includes refunded + inactive AND the incoming cohort
     list = [...participants];
@@ -2441,6 +2475,13 @@ function renderTrackerTable() {
     const inactiveBadge = (!p.isRefunded && p.isInactive)
       ? `<span class="stage-badge" style="background:#f3f4f6;color:#4b5563;margin-left:6px"><span class="stage-dot" style="background:#9ca3af"></span>Inactive</span>`
       : '';
+    // Cancel-branch dispositions: resolved-lost leads that stay in analytics.
+    const optedOutBadge = (!p.isRefunded && !p.isInactive && p.isOptedOut)
+      ? `<span class="stage-badge" style="background:#f5f3ff;color:#5b21b6;margin-left:6px" title="Self-disqualified — out of the reschedule cadence"><span class="stage-dot" style="background:#8b5cf6"></span>Opted Out</span>`
+      : '';
+    const noResponseBadge = (!p.isRefunded && !p.isInactive && p.isNoResponse)
+      ? `<span class="stage-badge" style="background:#fffbeb;color:#92400e;margin-left:6px" title="Full reschedule cadence sent (Offer Doc), no rebook"><span class="stage-dot" style="background:#f59e0b"></span>No Response</span>`
+      : '';
     // Purchase-specific refunds — flagged by the Mastersheet's Refund column,
     // separate from the challenge-level p.isRefunded. Shown alongside so the
     // operator immediately sees WHICH product was refunded.
@@ -2450,7 +2491,7 @@ function renderTrackerTable() {
     const pGCRefundBadge = p.purchaseGCRefunded
       ? `<span class="stage-badge" style="background:#fee2e2;color:#991b1b;margin-left:6px" title="Group Coaching purchase refunded"><span class="stage-dot" style="background:#ef4444"></span>GC refund</span>`
       : '';
-    const rowOpacity = (p.isRefunded || p.isInactive) ? 'opacity:0.6' : '';
+    const rowOpacity = (p.isRefunded || p.isInactive || p.isOptedOut || p.isNoResponse) ? 'opacity:0.6' : '';
 
     // Only show cohort badge during crossover — outside crossover the column
     // would be empty for everyone, so the badge would only add noise.
@@ -2471,6 +2512,8 @@ function renderTrackerTable() {
         </span>
         ${refundBadge}
         ${inactiveBadge}
+        ${optedOutBadge}
+        ${noResponseBadge}
         ${p101RefundBadge}
         ${pGCRefundBadge}
       </td>
@@ -3765,7 +3808,16 @@ function renderOnboarding() {
   } else if (day < 2) {
     ccBookingBody = `<div class="ob-empty">CC booking outreach starts on Day 2 (Tuesday). ${dayLabel}.</div>`;
   } else if (ccBooking.length === 0) {
-    ccBookingBody = `<div class="ob-empty">✨ Everyone has booked their CC.</div>`;
+    // Zero items here means no outreach STEP is due right now — NOT that
+    // everyone booked. People who already got today's step (e.g. the Day 2 DM)
+    // sit quietly until their next step's day arrives. Only claim everyone
+    // booked when there are genuinely no un-booked participants left.
+    const stillUnbooked = participants.filter(p =>
+      isActiveCohort(p) && !p.isRefunded && !p.isInactive && p.stageName === 'Participant'
+    ).length;
+    ccBookingBody = stillUnbooked === 0
+      ? `<div class="ob-empty">✨ Everyone has booked their CC.</div>`
+      : `<div class="ob-empty">✅ No CC outreach due right now — ${stillUnbooked} still haven't booked, but each one's next step appears on its day. ${dayLabel}.</div>`;
   } else {
     ccBookingBody = `<div class="ob-list">${ccBooking.map(({p, action}) => renderOnboardingCard(p, action)).join('')}</div>`;
   }
@@ -4233,6 +4285,10 @@ function computeFunnel() {
   let challengeRevenueGross = 0;
   let refundCount = 0, refundRevenue = 0;
   const sourceCount = {};   // { source: count }
+  // Cancel-recovery breakdown: of everyone who ever hit a cancel/no-show, how
+  // did it resolve? recovered = rebooked and moved on; optedOut / noResponse =
+  // resolved-lost; stillOpen = still working the reschedule cadence.
+  let cancelledEver = 0, recRecovered = 0, recOptedOut = 0, recNoResponse = 0, recStillOpen = 0;
 
   const attendedCCStages = ['DC - Scheduled', 'DC - Cancelled', 'DC - No Show',
                             'FU - Scheduled', "Didn't Book DC",
@@ -4255,6 +4311,17 @@ function computeFunnel() {
     // become wrong. Consistent with how chip filters and queue functions
     // treat them.
     if (p.isInactive) return;
+
+    // Cancel-recovery: keyed off whether they EVER cancelled/no-showed (not just
+    // their current stage), so someone who cancelled then rebooked still counts
+    // as "recovered".
+    if (sd['CC Cancelled'] || sd['CC No Show'] || sd['DC Cancelled'] || sd['DC No Show']) {
+      cancelledEver++;
+      if (p.isOptedOut) recOptedOut++;
+      else if (p.isNoResponse) recNoResponse++;
+      else if (DISPO_CANCEL_STAGES.indexOf(p.stageName) !== -1) recStillOpen++;
+      else recRecovered++;
+    }
 
     if (sd['CC Scheduled']) bookedCC++;
     if (attendedCCStages.includes(p.stageName)) attendedCC++;
@@ -4338,6 +4405,8 @@ function computeFunnel() {
     challengeRevenueNet,
     totalRevenue,
     sourceCount,
+    // Cancel-recovery breakdown
+    cancelledEver, recRecovered, recOptedOut, recNoResponse, recStillOpen,
     // Costs + profit
     adCost, affiliateCost, otherCosts, totalCosts, netProfit,
     coachCost101, coachCostGC, totalCoachCost,
@@ -4382,6 +4451,24 @@ function renderAnalytics() {
     ? `<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Funnel excludes ${f.refundCount} refunded · gross enrolled: ${f.grossTotal}</div>`
     : '';
 
+  // Cancel-recovery card: how CC/DC cancels & no-shows resolved. Only shown
+  // once there's at least one cancel/no-show in the cohort.
+  const recoveryRow = (label, value, color) => `
+    <div class="an-row">
+      <div><span class="an-row-label"${color ? ` style="color:${color}"` : ''}>${label}</span></div>
+      <span class="an-row-value"${color ? ` style="color:${color}"` : ''}>${value}</span>
+    </div>`;
+  const recoveryCard = f.cancelledEver > 0 ? `
+    <div class="an-card">
+      <div class="an-card-title">Cancel Recovery</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">Of everyone who cancelled or no-showed a CC/DC, how it resolved. All still count in the funnel.</div>
+      ${recoveryRow('Cancelled / No-Show', f.cancelledEver)}
+      ${recoveryRow('Recovered (rebooked)', f.recRecovered, '#047857')}
+      ${recoveryRow('Opted out (self-disqualified)', f.recOptedOut, '#5b21b6')}
+      ${recoveryRow('No response (Offer Doc sent)', f.recNoResponse, '#92400e')}
+      ${f.recStillOpen > 0 ? recoveryRow('Still in reschedule cadence', f.recStillOpen) : ''}
+    </div>` : '';
+
   document.getElementById('analytics-wrap').innerHTML = `
     <div class="an-card">
       <div class="an-card-title">Funnel — Active Challenge</div>
@@ -4398,6 +4485,8 @@ function renderAnalytics() {
       ${connector(f.attendedDC, f.purchased)}
       ${funnelStep('Purchased',       f.purchased)}
     </div>
+
+    ${recoveryCard}
 
     <div>
       <div class="an-card" style="margin-bottom:24px">
@@ -4701,6 +4790,7 @@ async function openModal(emailOrId) {
   renderRefundSection(p);
   renderOutreachSection(p);
   renderRescheduleSection(p);
+  renderOptedOutSection(p);
   renderBookDcSection(p);
   renderFollowUpSection(p);
   renderInactiveSection(p);
@@ -5093,7 +5183,9 @@ function renderRescheduleSection(p) {
 
   const stage = p.stageName || '';
   const eligibleStages = ['CC - Cancelled', 'CC - No Show', 'DC - Cancelled', 'DC - No Show'];
-  if (!eligibleStages.includes(stage) || p.isRefunded) {
+  // Opted-out leads self-disqualified — no rescheduling. (No Response leads keep
+  // the button: they might still rebook, which revives them.)
+  if (!eligibleStages.includes(stage) || p.isRefunded || p.isOptedOut) {
     wrap.innerHTML = '';
     return;
   }
@@ -5800,6 +5892,150 @@ async function undoRefund() {
   }
 }
 
+// ── Opt-Out / No Response disposition (participant modal) ──────
+// Opt-Out is a DC-only, closer-initiated close for leads who cancelled the
+// Discovery Call because they don't want to continue (not a fit / budget).
+// It removes them from the reschedule cadence but keeps them in analytics.
+// No Response is derived (see recomputeDisposition) and shown here read-only.
+function renderOptedOutSection(p) {
+  const wrap = document.getElementById('optedout-section');
+  if (!wrap) return;
+  const sd = p.sheetData || {};
+  const stage = p.stageName || '';
+
+  if (p.isRefunded || p.isInactive) { wrap.innerHTML = ''; return; }
+
+  // Already opted out → status + undo
+  if (p.isOptedOut) {
+    let dateLabel = '';
+    try { dateLabel = new Date(sd['Opted Out']).toLocaleDateString('en-US', {month:'short', day:'numeric'}); } catch(_) {}
+    wrap.innerHTML = `
+      <div class="section-title" style="margin-top:18px;color:#5b21b6">Opted Out</div>
+      <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:12px 14px;font-size:13px;color:#5b21b6;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <span>⊘ Opted out${dateLabel ? ' on <strong>' + esc(dateLabel) + '</strong>' : ''} — self-disqualified, removed from the reschedule cadence.</span>
+        <button class="btn btn-ghost btn-sm" onclick="clearOptedOut()" style="border-color:#ddd6fe;color:#5b21b6">Undo</button>
+      </div>`;
+    return;
+  }
+
+  let html = '';
+
+  // No Response info banner (derived) — Offer Doc sent, still in cancel/no-show
+  if (p.isNoResponse) {
+    html += `
+      <div class="section-title" style="margin-top:18px;color:#92400e">No Response</div>
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 14px;font-size:13px;color:#92400e">
+        ⏳ Full reschedule cadence sent (Offer Doc) with no rebook — auto-tagged <strong>No Response</strong>. If they rebook, this clears automatically.
+      </div>`;
+  }
+
+  // Opt-Out button — Discovery Call self-disqualification only
+  const isDcIssue = (stage === 'DC - Cancelled' || stage === 'DC - No Show');
+  if (isDcIssue) {
+    html += `
+      <div class="section-title" style="margin-top:18px">Opt-Out (self-disqualified)</div>
+      <button class="action-btn" onclick="markOptedOut()" style="width:100%;background:#f5f3ff;color:#5b21b6;border-color:#ddd6fe">⊘ Opt-Out</button>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.4">
+        Use when they cancelled the DC because they don't want to continue (not a fit / budget). Removes them from the reschedule cadence. A reason note is required.
+      </div>`;
+  }
+
+  wrap.innerHTML = html;
+}
+
+async function markOptedOut() {
+  if (!activeContact) return;
+  const target = activeContact;
+  const reason = (prompt('Opt-Out reason (required): what did they say? This is saved as a note on the contact.') || '').trim();
+  if (!reason) { alert('A reason note is required to mark Opt-Out.'); return; }
+
+  const nowIso = new Date().toISOString();
+  const nameParts = (target.name || '').trim().split(/\s+/);
+  const prev = (target.sheetData && target.sheetData['Opted Out']) || null;
+
+  // Optimistic update
+  if (!target.sheetData) target.sheetData = {};
+  target.sheetData['Opted Out'] = nowIso;
+  recomputeDisposition(target);
+  refreshModalContent(target);
+  renderStats(); renderFilters();
+  if (activeView === 'tracker') renderTable();
+  else if (activeView === 'today') renderOnboarding();
+  else if (activeView === 'accountability') renderAccountability();
+  else if (activeView === 'analytics') renderAnalytics();
+
+  try {
+    // 1) Save the reason as a GHL note (auditability) — mandatory per SOP.
+    const noteBody = '[Opt-Out] ' + reason;
+    const noteRes = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'createNote', contactId: target.contactId || null, email: target.email, body: noteBody })
+    });
+    const noteJson = await noteRes.json();
+    if (!noteJson.success) throw new Error(noteJson.error || 'Note save failed');
+    // Reflect the note optimistically in the open modal
+    if (Array.isArray(target.allNotes)) {
+      const newNote = { id: String(Date.now()), body: noteBody, dateAdded: nowIso };
+      target.allNotes.unshift(newNote);
+      target.lastNote = newNote;
+      if (activeContact === target) renderNotes(target.allNotes);
+    }
+    // 2) Mark the 'Opted Out' column
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'recordEvent', email: target.email, column: 'Opted Out',
+        firstName: nameParts[0] || '', lastName: nameParts.slice(1).join(' ') || '', timestamp: nowIso
+      })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Save error');
+  } catch(err) {
+    // Revert the flag (a saved note is harmless — it stays as an audit trail)
+    if (target.sheetData) target.sheetData['Opted Out'] = prev;
+    recomputeDisposition(target);
+    refreshModalContent(target);
+    renderStats(); renderFilters();
+    if (activeView === 'tracker') renderTable();
+    alert('Could not mark Opt-Out: ' + err.message);
+  }
+}
+
+async function clearOptedOut() {
+  if (!activeContact) return;
+  const target = activeContact;
+  const prev = (target.sheetData && target.sheetData['Opted Out']) || null;
+
+  if (target.sheetData) target.sheetData['Opted Out'] = '';
+  recomputeDisposition(target);
+  refreshModalContent(target);
+  renderStats(); renderFilters();
+  if (activeView === 'tracker') renderTable();
+  else if (activeView === 'today') renderOnboarding();
+  else if (activeView === 'accountability') renderAccountability();
+  else if (activeView === 'analytics') renderAnalytics();
+
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'clearEvent', email: target.email, column: 'Opted Out' })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Save error');
+  } catch(err) {
+    if (!target.sheetData) target.sheetData = {};
+    target.sheetData['Opted Out'] = prev;
+    recomputeDisposition(target);
+    refreshModalContent(target);
+    renderStats(); renderFilters();
+    if (activeView === 'tracker') renderTable();
+    alert('Could not undo: ' + err.message);
+  }
+}
+
 function renderNotes(notes, loading) {
   document.getElementById('m-notes-count').textContent = loading ? '…' : notes.length;
   const el = document.getElementById('notes-list');
@@ -5843,6 +6079,7 @@ function refreshModalContent(p) {
   renderRefundSection(p);
   renderOutreachSection(p);
   renderRescheduleSection(p);
+  renderOptedOutSection(p);
   renderBookDcSection(p);
   renderFollowUpSection(p);
   renderInactiveSection(p);
