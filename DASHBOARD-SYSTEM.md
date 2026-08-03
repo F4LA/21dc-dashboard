@@ -219,7 +219,7 @@ Router: `setView(view)`. `'queue'` y `'onboarding'` redirigen a `'today'`. Arran
 - **Revenue**: challenge-net + montos 1-on-1 y GC (del **Mastersheet**). Filas rojas de refunds por producto ("1-on-1 refunds · N", "GC refunds · N") que restan.
 - **Source Breakdown**: por fuente (`renderSourceRows`). Afiliados identificados por `Source`; rate uniforme **$97/referral**.
 - **Costs & Profitability**: Ad cost, Affiliate cost, Other costs (del tab Challenge Costs), **coach payouts 1-on-1 y GC** (payout mensual × duración de contrato, solo clientes no-refunded, del Mastersheet), Total costs, **Net profit** (aquí mismo, junto a costos, a propósito). CACs: **Blended CAC** = `(ad+affiliate)/net participants`; **Paid Ads CAC** = `ad/paid-source participants` (sources `meta ads`, `ads`, `manychat ads`).
-- **AI Analysis**: botón "✨ Analyze this challenge" → `runAIAnalysis()` → action `analyzeChallenge` → Apps Script llama a Anthropic (Sonnet `claude-sonnet-4-5-20250929`) server-side y devuelve markdown. Read-only. Filtra al cohort activo. El prompt distingue challenge ACTIVE (calcula "Día X de 21", no interpreta outcomes faltantes como fracaso) vs COMPLETED. **⚠ Roto al cierre por falta de créditos en la cuenta de Anthropic Console — ver §14.**
+- **AI Analysis**: botón "✨ Analyze this challenge" → `runAIAnalysis()` → action `analyzeChallenge` → Apps Script llama a Anthropic (Sonnet `claude-sonnet-4-5-20250929`) server-side y devuelve markdown. Read-only. Filtra al cohort activo. El prompt distingue challenge ACTIVE (calcula "Día X de 21", no interpreta outcomes faltantes como fracaso) vs COMPLETED. **El prompt incluye el breakdown de Cancel Recovery** (`summarizeChallenge_` expone `cancelledEver/recovered/optedOut/noResponse/stillInCadence`; `buildAnalysisPrompt_` le pide narrarlo en el tema de funnel). **⚠ Roto al cierre por falta de créditos en la cuenta de Anthropic Console — ver §14.**
 
 ### 5.5. History (Bernardo)
 
@@ -434,8 +434,8 @@ Ver §10.4. El intake form ya **no** se llena en Everfit — ahora es un **Googl
 13. Considerar revocar el PIT viejo de GHL cuando todo esté validado.
 14. `computeStageLocal` (frontend) diverge levemente de `computeStage_` (backend) — mantenerlos en sync al tocar la lógica de stage.
 15. Llenar el tab `Challenge Costs` con números reales por challenge (sin eso, las cards muestran placeholder).
-16. **Fase 2 de Opt-Out/No Response:** alimentar el breakdown de Cancel Recovery (cancelled → recovered/opted-out/no-response) al prompt de la AI Analysis (`summarizeChallenge_` + `buildAnalysisPrompt_` en el backend). Diferido: toca los `.gs` (riesgo de clobber, no están en git) y la AI Analysis está rota por créditos (TODO #1). El breakdown ya es visible en la card de Analytics sin la AI.
-17. **Setup requerido:** agregar la columna `Opted Out` a mano en `Participants` y `Historical` (ver §4.1). Hasta entonces, el botón Opt-Out falla al guardar.
+16. ~~**Fase 2 de Opt-Out/No Response:** alimentar el breakdown de Cancel Recovery al prompt de la AI Analysis.~~ ✅ **Hecho (2026-08-03):** `summarizeChallenge_` + `buildAnalysisPrompt_` actualizados. **Requiere:** pegar los cambios en `Code.gs` + New Version deploy, y que la AI Analysis tenga créditos (TODO #1) para verse. El breakdown ya es visible en la card de Analytics sin la AI.
+17. ~~**Setup requerido:** agregar la columna `Opted Out` a mano en `Participants` y `Historical`.~~ ✅ **Hecho (2026-08-03):** columna `Opted Out` agregada en ambos tabs (columna AN).
 
 ---
 

@@ -9,6 +9,20 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 ---
 
+## 2026-08-03 — Fase 2: Cancel Recovery en el prompt de AI Analysis (backend)
+
+**Qué se cambió (backend `Code.gs`):**
+- `summarizeChallenge_` ahora computa `cancelledEver / recovered / optedOut / noResponse / stillInCadence` (excluye refunded+inactive, igual que el funnel del frontend). Estos campos viajan solos al prompt vía `JSON.stringify(target)`.
+- `buildAnalysisPrompt_`: dos bullets de contexto nuevos (qué significan las categorías de cancel-recovery; y que el CC nunca lleva opt-out) + el tema 1 (funnel) ahora pide narrar el breakdown de recuperación.
+
+**Setup / deploy:** pegar ambas funciones en `Code.gs` (editor de Apps Script) → **Manage deployments → Edit → New version**. Se verá solo cuando la AI Analysis tenga créditos de Anthropic (TODO #1). Copia de trabajo `~/Downloads/Code_21DC_Dashboard.gs` sincronizada.
+
+**Por qué:** cierra el pedido de que el análisis con AI cuente la historia del cancel-recovery ("de X que cancelaron: A reagendaron, B opt-out, C no respondieron"), no solo las conversiones. El backend no está en git → se documenta aquí y en `DASHBOARD-SYSTEM.md` (§5.4, §14 items 16–17).
+
+**Archivos / commits:** Code.gs (fuera de git) · DASHBOARD-SYSTEM.md + DECISION-LOG.md · 46d7dd2
+
+---
+
 ## 2026-08-03 — Opt-Out + No Response para cancelaciones que no valen reschedule
 
 **Qué se cambió (frontend `index.html`):**
