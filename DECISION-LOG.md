@@ -21,7 +21,7 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 **Setup / deploy:** pegar `Code.gs` completo → New version. No requiere trigger nuevo. Copia `~/Downloads` sincronizada.
 
-**Archivos / commits:** index.html · Code.gs (fuera de git) · <hash>
+**Archivos / commits:** index.html · Code.gs (fuera de git) · b97a31e
 
 ---
 
