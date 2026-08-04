@@ -9,6 +9,19 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 ---
 
+## 2026-08-03 — Settings: renombrar "Challenge Start Date" → "Accepting-clients start date"
+
+**Qué se cambió (frontend `index.html`, solo texto):**
+- Label del setting **"Challenge Start Date" → "Accepting-clients start date"** + hint explicando que es el día que abre el promo (viernes), **no** el primer día del challenge, y que el **Día 1 = esta fecha + 10 días** (`getDay1Date`). El Script Property sigue siendo `CHALLENGE_START_DATE` (no se tocó el backend).
+- Actualizado el empty-state de CC Booking Outreach ("Set the accepting-clients start date…").
+- Corregida la descripción de CC Booking Outreach: quitado "→ Day 19 Offer Doc (Gabi)" que quedó colgado tras removerlo (ahora "Day 2 DM → Day 4 Call").
+
+**Por qué:** Bernardo se confundió y puso el primer día del challenge (3-ago) como start date → dashboard vacío (excluye a los que compraron en la promo) y Día 1 mal. La fecha correcta es la de apertura de promo (24-jul); el nombre viejo inducía al error. **No** se cambió la mecánica (sigue el `+10` hardcodeado); se evaluó rediseñar para que sea "el primer día del challenge" directo, pero se dejó para hacerlo entre challenges (toca el filtro de participantes, riesgoso en vivo).
+
+**Archivos / commits:** index.html · <hash>
+
+---
+
 ## 2026-08-03 — GHL.gs: errores en inglés + match de columna tolerante a espacios
 
 **Qué se cambió (backend `GHL.gs`):**

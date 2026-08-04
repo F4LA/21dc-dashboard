@@ -1155,8 +1155,11 @@
     </div>
     <div class="settings-body">
       <div class="settings-row">
-        <label>Challenge Start Date</label>
+        <label>Accepting-clients start date</label>
         <input type="date" id="settings-date" />
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px;line-height:1.4">
+        The day the promo opens and you start accepting clients (a Friday) — <strong>not</strong> the challenge's first day. Day 1 of the challenge is automatically this date + 10 days. Also filters which participants show, by purchase date.
       </div>
       <div class="settings-footer">
         <span class="settings-saved" id="settings-saved">✓ Saved — reloading…</span>
@@ -3833,7 +3836,7 @@ function renderOnboarding() {
   // CC Booking section body
   let ccBookingBody;
   if (day === null) {
-    ccBookingBody = `<div class="ob-empty">Set Challenge Start Date in ⚙️ to see CC booking outreach.</div>`;
+    ccBookingBody = `<div class="ob-empty">Set the accepting-clients start date in ⚙️ to see CC booking outreach.</div>`;
   } else if (day < 2) {
     ccBookingBody = `<div class="ob-empty">CC booking outreach starts on Day 2 (Tuesday). ${dayLabel}.</div>`;
   } else if (ccBooking.length === 0) {
@@ -3892,7 +3895,7 @@ function renderOnboarding() {
     <div class="owner-gabi">${(activeView === 'today') ? renderIntakeFormSection() : ''}</div>
 
     <div class="owner-gabi owner-bernardo">${obSection('cc_booking', 'CC Booking Outreach', ccBooking.length,
-      `New booking flow: Day 2 DM (Gabi) → Day 4 Call (Bernardo) → Day 19 Offer Doc (Gabi). Each step shows when its scheduled day arrives. Per-card owner classes route items to the right filter.`,
+      `New booking flow: Day 2 DM (Gabi) → Day 4 Call (Bernardo). Each step shows when its scheduled day arrives. Per-card owner classes route items to the right filter.`,
       ccBookingBody, true /* defaultCollapsed */)}</div>
   `;
 
