@@ -18,7 +18,7 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 **Por qué:** Bernardo se confundió y puso el primer día del challenge (3-ago) como start date → dashboard vacío (excluye a los que compraron en la promo) y Día 1 mal. La fecha correcta es la de apertura de promo (24-jul); el nombre viejo inducía al error. **No** se cambió la mecánica (sigue el `+10` hardcodeado); se evaluó rediseñar para que sea "el primer día del challenge" directo, pero se dejó para hacerlo entre challenges (toca el filtro de participantes, riesgoso en vivo).
 
-**Archivos / commits:** index.html · <hash>
+**Archivos / commits:** index.html · e1f0426
 
 ---
 
