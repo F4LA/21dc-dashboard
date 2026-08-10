@@ -18,7 +18,7 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 **Por qué:** las "coming up" son una **agenda** (qué llamadas vienen), no accountability ("¿el equipo hizo su trabajo?"). Mezcladas mostraban "33" como si fueran pendientes/notificaciones. Bernardo pidió separarlas en su propio tab con categorías colapsables.
 
-**Archivos / commits:** index.html · <hash>
+**Archivos / commits:** index.html · fba0002
 
 ---
 
