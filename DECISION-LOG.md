@@ -21,7 +21,7 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 **Setup / deploy:** pegar `GHL.gs` completo → **Manage deployments → Edit → New version**. Bernardo además borra la fila de Peter en `Historical`.
 
-**Archivos / commits:** GHL.gs (fuera de git) · DASHBOARD-SYSTEM.md + DECISION-LOG.md · <hash>
+**Archivos / commits:** GHL.gs (fuera de git) · DASHBOARD-SYSTEM.md + DECISION-LOG.md · 1ea169d
 
 ---
 
