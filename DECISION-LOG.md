@@ -23,7 +23,7 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 **Setup / deploy:** pegar `Code.gs` completo → **Manage deployments → Edit → New version**. Copia `~/Downloads` sincronizada.
 
-**Archivos / commits:** Code.gs (fuera de git) · DASHBOARD-SYSTEM.md + DECISION-LOG.md · <hash>
+**Archivos / commits:** Code.gs (fuera de git) · DASHBOARD-SYSTEM.md + DECISION-LOG.md · f1ba779
 
 ---
 
