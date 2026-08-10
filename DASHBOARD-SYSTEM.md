@@ -1,6 +1,6 @@
 # DASHBOARD-SYSTEM — 21DC Dashboard (Strong Standard Coaching)
 
-**Última actualización: 2026-08-03**
+**Última actualización: 2026-08-10**
 
 **Documento vivo · Fuente de verdad permanente · Uso interno**
 Describe cómo funciona el 21DC Dashboard: su arquitectura, cada vista, cada botón, las integraciones, las decisiones y sus porqués. **No es un traspaso puntual** — es la referencia canónica que se mantiene actualizada en cada cambio al dashboard.
@@ -65,7 +65,7 @@ Herramienta interna de operaciones para el **21-Day Challenge** de Strong Standa
 - **Escrituras:**
   - Botones de stage/onboarding/outreach → **Google Sheet Participants** (vía `recordEvent`/`clearEvent`).
   - "Add note" en el modal → **GHL** (nota en el contacto, para auditabilidad).
-  - Booking de citas (Reschedule / Book DC / Book FU / Book CC) → **GHL Calendar** (crea appointment real); FU además escribe `FU Scheduled` en el sheet.
+  - Booking de citas (Reschedule / Book DC / Book FU / Book CC) → **GHL Calendar** (crea appointment real) **y además escribe la columna Scheduled correspondiente al sheet** (`CC Scheduled` / `DC Scheduled` / `FU Scheduled`) vía `recordEvent_`. **(Fix 2026-08-10:** antes solo el FU escribía al sheet; CC/DC dependían de una automatización de GHL que no dispara confiablemente en citas creadas por API → DC agendados salían como "no agendados". Ahora el dashboard lo registra directo.)
   - Update Past Challenge → **Google Sheet Historical**.
   - Montos/refunds/coach cost → **se leen del Mastersheet** (enrichment on-read); un writer opcional los copia al sheet sin sobrescribir.
 
@@ -289,7 +289,7 @@ Secciones (de arriba a abajo):
 | Mark Inactive / Undo | `markInactive` / `clearInactive` → `recordEvent`/`clearEvent` | **Sheet Participants** (`Marked Inactive`) |
 | Opt-Out / Undo (DC) | `markOptedOut` / `clearOptedOut` → `createNote` + `recordEvent`/`clearEvent` | **GHL** (nota `[Opt-Out · autor]`) **+ Sheet Participants** (`Opted Out`) |
 | Add note (autor obligatorio "Note by") | `saveNote` → `createNote` | **GHL** (nota en contacto, prefijo `[autor]`) |
-| Reschedule CC/DC, Book DC now, Book FU, Book CC (Day 4) | `confirmReschedule`/`confirmBookDc`/`confirmFollowUp`/`confirmDay4Book` → `bookAppointment` | **GHL Calendar** (+ sheet `FU Scheduled` solo para FU) |
+| Reschedule CC/DC, Book DC now, Book FU, Book CC (Day 4) | `confirmReschedule`/`confirmBookDc`/`confirmFollowUp`/`confirmDay4Book` → `bookAppointment` | **GHL Calendar + Sheet** (`CC Scheduled` / `DC Scheduled` / `FU Scheduled` según el tipo) |
 | Update Past Challenge outcomes | `recordExternal` → `recordHistoricalEvent` | **Sheet Historical** |
 | Save Challenge Start Date | `saveStartDate` → `updateChallengeStartDate` | **Script Property** `CHALLENGE_START_DATE` |
 | Save Active Challenge Month | `saveActiveMonth` → `updateActiveChallengeMonth` | **Script Property** `ACTIVE_CHALLENGE_MONTH` |
@@ -460,6 +460,7 @@ Ver §10.4. El intake form ya **no** se llena en Everfit — ahora es un **Googl
 - **Mastersheet leía tabs equivocados** ($0 en purchases) → strict tab-name match.
 - **Challenge Costs $0** por comparar "June, 2026" vs "2026-06" → normalizar ambos lados.
 - **Backfill histórico:** la data de no-shows/cancels de challenges pasados está **perdida** (se consolidó todo en "Didn't Purchase" al cerrar cada challenge). Por eso History muestra `—` donde no es confiable.
+- **DC agendados salían como "no agendados" (fix 10-ago-2026):** `bookAppointment` creaba la cita en GHL pero **no escribía `DC/CC Scheduled` al sheet** (solo FU lo hacía); dependía de una automatización de GHL que **no dispara confiablemente en citas creadas por API**. Resultado: unos DC aparecían y otros no, inconsistente. Fix: el handler ahora escribe la columna Scheduled del tipo directo al sheet. **Bonus bug:** el título de toda cita CC/DC se hardcodeaba como `"(Rescheduled)"` aunque fuera fresca — corregido a "Clarity/Discovery/Follow-Up Call — Nombre". Data ya afectada (booked pre-fix) se arregla a mano con **Manual Booking Override → Mark DC Scheduled**.
 - **Performance:** el bottleneck era `enrichEventsWithEmail_` (1 GHL call por evento) + re-fetch de 90d de DC events por request. Fix multi-capa: skip en lite call + CacheService + warmer trigger. First-paint ~15s → ~1-2s.
 
 ---

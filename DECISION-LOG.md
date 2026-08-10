@@ -9,6 +9,24 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 ---
 
+## 2026-08-10 — Fix: bookings del dashboard no registraban CC/DC Scheduled + título "(Rescheduled)"
+
+**Qué se cambió (backend `Code.gs`, handler `bookAppointment`):**
+- **Ahora escribe la columna Scheduled al sheet para TODOS los tipos** (`CC Scheduled` / `DC Scheduled` / `FU Scheduled`), no solo FU. Antes CC/DC no se escribían y dependían de una automatización de GHL que **no dispara confiablemente en citas creadas por API** → DC que Deniz sí agendaba salían en el dashboard como si siguieran en CC-Scheduled (inconsistente: a unos sí, a otros no).
+- **Título de cita corregido:** antes toda cita CC/DC se titulaba `"(Rescheduled)"` aunque fuera fresca. Ahora "Clarity Call / Discovery Call / Follow-Up Call — Nombre".
+
+**Por qué:** Bernardo reportó que los DC salían como "DC (Rescheduled)" en GHL y que varios agendados no aparecían en el dashboard. Se verificó en el CSV: Chad/Sergio/Liz tenían el DC en GHL pero `DC Scheduled` vacío. La cita se crea normal (`appointmentStatus: confirmed`); el problema era la dependencia de la automatización + el título hardcodeado.
+
+**Nota:** `computeStage_` ya maneja reschedules por el desempate cronológico (un `*Scheduled` nuevo tras un Cancelled/No Show revive el stage), así que escribir la columna en reschedules también es correcto. La automatización de GHL del DC queda redundante para bookings del dashboard (los CC self-book del público siguen dependiendo de su automatización).
+
+**Data ya afectada (pre-fix):** los DC ya agendados que no aparecen (Chad, Sergio, Liz) se arreglan a mano con **modal → More options → Manual Booking Override → "Mark DC Scheduled"** (registra el booking existente sin crear cita nueva en GHL).
+
+**Setup / deploy:** pegar `Code.gs` completo → **Manage deployments → Edit → New version**. Copia `~/Downloads` sincronizada.
+
+**Archivos / commits:** Code.gs (fuera de git) · DASHBOARD-SYSTEM.md + DECISION-LOG.md · <hash>
+
+---
+
 ## 2026-08-03 — Settings: renombrar "Challenge Start Date" → "Accepting-clients start date"
 
 **Qué se cambió (frontend `index.html`, solo texto):**
