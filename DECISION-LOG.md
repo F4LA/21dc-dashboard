@@ -9,6 +9,19 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 ---
 
+## 2026-08-10 — Nuevo tab "Calls" (agenda) separado de Accountability
+
+**Qué se cambió (frontend `index.html`):**
+- Nuevo tab **Calls** (entre Today y Accountability) con `renderCalls()`. Contiene **solo "coming up"**, en secciones **colapsables por tipo** (`obSection`): **Clarity Calls**, **Discovery Calls**, y **Follow-Up Calls** (solo si hay ≥1). Contador en el tab (`calls-count`) = total próximas.
+- **Accountability se limpió:** se le quitó la sección "Calls — coming up"; queda solo "Calls — happened, not updated" + Dennis + Gabi (accountability real). El badge del tab (`getAccountabilityCount`) no incluye próximas llamadas (nunca lo hizo).
+- `setView` rutea `'calls'`; nuevo contenedor `#calls-wrap`.
+
+**Por qué:** las "coming up" son una **agenda** (qué llamadas vienen), no accountability ("¿el equipo hizo su trabajo?"). Mezcladas mostraban "33" como si fueran pendientes/notificaciones. Bernardo pidió separarlas en su propio tab con categorías colapsables.
+
+**Archivos / commits:** index.html · <hash>
+
+---
+
 ## 2026-08-10 — Fix: bookings del dashboard no registraban CC/DC Scheduled + título "(Rescheduled)"
 
 **Qué se cambió (backend `Code.gs`, handler `bookAppointment`):**

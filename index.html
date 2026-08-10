@@ -1131,6 +1131,10 @@
     Today
     <span class="view-tab-count" id="today-count">·</span>
   </button>
+  <button class="view-tab" data-view="calls" onclick="setView('calls')">
+    Calls
+    <span class="view-tab-count" id="calls-count">·</span>
+  </button>
   <button class="view-tab" data-view="accountability" onclick="setView('accountability')">
     Accountability
     <span class="view-tab-count" id="accountability-count">0</span>
@@ -1255,6 +1259,9 @@
          renderToday creates #onboarding-wrap inside the Actions Today
          section, and renderOnboarding fills it. -->
 
+
+    <!-- Calls view (upcoming calls schedule, by type) -->
+    <div class="acc-wrap" id="calls-wrap" style="display:none"></div>
 
     <!-- Accountability view -->
     <div class="acc-wrap" id="accountability-wrap" style="display:none"></div>
@@ -1438,6 +1445,7 @@ function setView(view) {
   // lives inside today-wrap as part of the Actions Today obSection, so hiding
   // today-wrap is enough.
   document.getElementById('today-wrap').style.display          = 'none';
+  document.getElementById('calls-wrap').style.display          = 'none';
   document.getElementById('accountability-wrap').style.display = 'none';
   document.getElementById('analytics-wrap').style.display      = 'none';
   document.getElementById('history-wrap').style.display        = 'none';
@@ -1459,6 +1467,7 @@ function setView(view) {
       applyOwnerFilter();    // re-apply the owner filter after sections render
     })();
   }
+  else if (view === 'calls')          renderCalls();
   else if (view === 'accountability') renderAccountability();
   else if (view === 'analytics')      renderAnalytics();
   else if (view === 'history')        renderHistory();
@@ -2337,6 +2346,8 @@ function renderFilters() {
   document.getElementById('queue-count').textContent          = getActionQueue().length;
   document.getElementById('onboarding-count').textContent     = getOnboardingCount();
   document.getElementById('accountability-count').textContent = getAccountabilityCount();
+  var callsCountEl = document.getElementById('calls-count');
+  if (callsCountEl) callsCountEl.textContent = getAllScheduledCalls().upcoming.length || '·';
 
   // Search bar visible in tracker + today (Today now contains the Action Queue table)
   const searchWrap = document.getElementById('search-wrap');
@@ -4245,6 +4256,41 @@ async function markOnboardingSent(email, type, btn) {
 }
 
 // ── Accountability view ───────────────────────────────────
+// ── Calls view (upcoming call schedule, by type) ─────────────
+// A read-only agenda of what's coming, split by call type into collapsible
+// sections. Lives in its own tab (not Accountability) so the upcoming count
+// doesn't read like a to-do list. "Happened, not updated" stays in
+// Accountability — that one IS a work-check.
+function renderCalls() {
+  ['state-loading', 'state-error', 'state-empty', 'data-table'].forEach(id => {
+    document.getElementById(id).style.display = 'none';
+  });
+  const wrap = document.getElementById('calls-wrap');
+  wrap.style.display = 'block';
+
+  const sortByAt = (items, t) => items.slice().sort((a, b) =>
+    new Date(a[CALL_TYPES[t].at]).getTime() - new Date(b[CALL_TYPES[t].at]).getTime());
+  const cc = sortByAt(getScheduledCalls('CC').upcoming, 'CC');
+  const dc = sortByAt(getScheduledCalls('DC').upcoming, 'DC');
+  const fu = sortByAt(getScheduledCalls('FU').upcoming, 'FU');
+
+  const body = (items, t) => items.length
+    ? `<div class="acc-list">${items.map(p => renderCallCard({ p, t }, false)).join('')}</div>`
+    : `<div class="acc-empty">No upcoming ${esc(CALL_TYPES[t].label.toLowerCase())}s scheduled.</div>`;
+
+  let html = '';
+  html += obSection('calls-cc', 'Clarity Calls', cc.length,
+    'Upcoming Clarity Calls (real time from GHL Calendar, Eastern). Soonest first.', body(cc, 'CC'), false);
+  html += obSection('calls-dc', 'Discovery Calls', dc.length,
+    'Upcoming Discovery Calls (Eastern). Soonest first.', body(dc, 'DC'), false);
+  // Follow-Up section only appears when there are any FU calls scheduled.
+  if (fu.length) {
+    html += obSection('calls-fu', 'Follow-Up Calls', fu.length,
+      'Upcoming Follow-Up Calls (Eastern). Soonest first.', body(fu, 'FU'), false);
+  }
+  wrap.innerHTML = html;
+}
+
 function renderAccountability() {
   document.getElementById('state-loading').style.display = 'none';
   document.getElementById('state-error').style.display   = 'none';
@@ -4257,17 +4303,6 @@ function renderAccountability() {
   const calls = getAllScheduledCalls();
 
   document.getElementById('accountability-wrap').innerHTML = `
-    <div class="acc-section">
-      <div class="acc-section-header">
-        <span class="acc-section-title">Calls — coming up</span>
-        <span class="acc-section-count${calls.upcoming.length === 0 ? ' zero' : ''}">${calls.upcoming.length}</span>
-      </div>
-      <div class="acc-section-desc">Clarity, Discovery + Follow-Up Calls still to happen (real time from GHL Calendar, Eastern). Sorted soonest first.</div>
-      ${calls.upcoming.length === 0
-        ? `<div class="acc-empty">No upcoming calls scheduled.</div>`
-        : `<div class="acc-list">${calls.upcoming.map(it => renderCallCard(it, false)).join('')}</div>`}
-    </div>
-
     <div class="acc-section">
       <div class="acc-section-header">
         <span class="acc-section-title">Calls — happened, not updated</span>

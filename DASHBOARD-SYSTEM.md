@@ -165,7 +165,7 @@ No hay columna "stage". Se calcula mirando **qué timestamps existen** en la fil
 
 ## 5. Las vistas (tabs) — pestaña por pestaña
 
-Nav actual = **5 tabs**: `Tracker · Today · Accountability · Analytics · History` + engranaje **Settings (⚙️)**.
+Nav actual = **6 tabs**: `Tracker · Today · Calls · Accountability · Analytics · History` + engranaje **Settings (⚙️)**.
 (Antes eran 7: se consolidó "Action Queue" y "Onboarding" dentro de **Today** — "Layout B".)
 
 Router: `setView(view)`. `'queue'` y `'onboarding'` redirigen a `'today'`. Arranque siempre en `'tracker'` (no se restaura de localStorage).
@@ -204,14 +204,19 @@ Router: `setView(view)`. `'queue'` y `'onboarding'` redirigen a `'today'`. Arran
 
 ### 5.3. Accountability (solo Bernardo)
 
-- `renderAccountability()` con estas secciones:
-  - **"Calls — coming up"**: participantes en `CC/DC/FU - Scheduled` cuya call **aún no pasa**, con la **hora real de GHL Calendar en Eastern** (`ccCallAt`/`dcCallAt`/`fuCallAt`). Es el "cuántas llamadas quedan por hacer", CC+DC+FU mezcladas y ordenadas por la más próxima; cada card etiqueta CC/DC/FU. `getAllScheduledCalls().upcoming`.
-  - **"Calls — happened, not updated"**: en `CC/DC/FU - Scheduled` cuya call **ya terminó hace 1h+** (ventana de 7 días) y siguen en Scheduled → el closer no marcó el resultado. **Llena un hueco:** Accountability antes solo veía la reschedule cadence (que requiere un cancel/no-show ya marcado), nunca una call agendada que simplemente no se tocó. `getAllScheduledCalls().needsUpdate`.
+- `renderAccountability()` con estas secciones (**solo accountability real** — "¿el equipo hizo su trabajo?". Los "coming up" se movieron a su propio tab **Calls**, ver §5.3b):
+  - **"Calls — happened, not updated"**: participantes en `CC/DC/FU - Scheduled` cuya call **ya terminó hace 1h+** (ventana de 7 días) y siguen en Scheduled → el closer no marcó el resultado. **Llena un hueco:** Accountability antes solo veía la reschedule cadence (que requiere un cancel/no-show ya marcado), nunca una call agendada que simplemente no se tocó. `getAllScheduledCalls().needsUpdate`.
   - **Prompt post-llamada (closer):** el marcar resultado ya existe en **Today → Calls Today** (badge "⚠ Needs update" cuando la call terminó y el stage no avanzó; para FU solo cuenta como "✓ Processed" al marcar `Purchase 101/GC` o `Didn't Purchase` — `hasStageAdvancedAfter`). **Regla del FU:** no-show o cancel de un Follow-Up → se marca **`Didn't Purchase`** (no hay stages FU No Show/Cancelled). Ojo: `Didn't Purchase` es terminal duro, así que un rebook posterior **no** reaparece solo; caso raro, se maneja a mano.
   - **"Dennis — open follow-ups"**: reschedule cadence stale 48h+ (DM, Call #1, Call #2, Offer Doc). `getDennisFlags()`.
   - **"Gabi — open follow-ups"**: onboarding outreach stale 48h+ (Login Reachout, Welcome, o CC booking overdue). `getJackieFlags()` (nombre interno legacy = "Jackie", ya no renombrado).
 - Buffer: 48h desde el evento (24h para actuar + 24h antes de que el flag llegue a Bernardo). Filtrado a `isActiveCohort`. Excluye refunded/inactive.
 - Solo visibilidad. Click → modal (para auditar notas y, si la acción se hizo pero no se marcó, marcarla retroactivamente).
+
+### 5.3b. Calls (agenda de próximas llamadas)
+
+`renderCalls()` → tab **Calls** (entre Today y Accountability). Es una **agenda read-only** de las llamadas que vienen, separada de Accountability a propósito (para que el conteo de próximas no se lea como una lista de pendientes). Contiene **solo "coming up"**, en **secciones colapsables por tipo** (reusa el helper `obSection`, estado persistido en localStorage):
+- **Clarity Calls**, **Discovery Calls**, y **Follow-Up Calls** (esta última **solo aparece si hay ≥1** FU agendado). Cada sección: participantes en `CC/DC/FU - Scheduled` cuya call aún no pasa, hora real de GHL en Eastern, ordenadas por la más próxima. Fuente: `getScheduledCalls(type).upcoming`.
+- El tab muestra un contador (`calls-count`) = total de próximas. Click en una card → modal.
 
 ### 5.4. Analytics (Bernardo)
 
