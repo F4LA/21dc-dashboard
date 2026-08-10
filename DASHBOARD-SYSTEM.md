@@ -235,6 +235,7 @@ Router: `setView(view)`. `'queue'` y `'onboarding'` redirigen a `'today'`. Arran
 - 10 columnas: Total, Booked CC, Attended CC, Booked DC, Attended DC, Purchased + % de conversión step-by-step.
 - Filas clicables → detalle expandido con funnel de 5 pasos, revenue, Costs & Profitability per-challenge, y botón AI Analysis por challenge (`runHistAIAnalysis`).
 - **Heurística de honestidad:** cuando la data de attendance de un challenge histórico es incompleta (no hay no-shows/cancels registrados), muestra `—` en gris en vez de números engañosos (`isIncompleteCC`/`isIncompleteDC`). Challenges "limpios" muestran números reales automáticamente.
+- **Exclusión de refunds/inactivos (fix 10-ago-2026):** `computeChallengeSummary_` ahora **espeja `computeFunnel`**: excluye `Refunded` e `Marked Inactive` del funnel + purchases + revenue, y netea la cuota de `Courtesy Refund`. Antes contaba TODA compra sin mirar flags, así que archivados sobre-contaban (ej. julio salía 5 purchases con 2 refunded/inactive; ahora 3). Nota: para participantes que **nunca participaron** (compraron y refund pre-inicio, sin pasar por el funnel — ej. Peter Berg) la regla es **borrar la fila** del `Historical` a mano, no marcar flag (si no, seguirían en "Enrolled").
 - `prettyChallengeName` normaliza nombres (Date object "Sun Mar 01 2026…" → "2026-03").
 
 ### 5.6. Settings (⚙️)
@@ -348,7 +349,7 @@ El challenge nuevo empieza a vender mientras el anterior aún corre → hay dos 
 - `GHL_BASE = 'https://services.leadconnectorhq.com'`, `GHL_VERSION = '2021-07-28'`.
 - `ghlRequest_(method, endpoint, payload)` y `ghlRequestVersioned_(..., version)` — **los calendarios requieren `2021-04-15`** (¡distinto de contacts!). `/users/` requiere `2021-07-28` + scope `users.readonly`.
 - `findContactIdByEmail_` (usa `/contacts/search/duplicate`), `getContact_`, `getContactNotes_`, `getAllContactNotes_` (fetch paralelo con `fetchAll`), `createContactNote_`.
-- `getParticipantsFromSheet_`, `computeStage_`, `recordEvent_`, `findHistoricalByEmail_`, `recordHistoricalEvent_`, `getHistoricalData_`, `computeChallengeSummary_` (expone counts granulares para la heurística de History), `archiveChallenge_` (cohort-aware + snapshot).
+- `getParticipantsFromSheet_`, `computeStage_`, `recordEvent_`, `findHistoricalByEmail_`, `recordHistoricalEvent_`, `getHistoricalData_`, `computeChallengeSummary_` (expone counts granulares para la heurística de History; **espeja `computeFunnel`** — excluye Refunded/Inactive, netea Courtesy — desde el 10-ago-2026), `archiveChallenge_` (cohort-aware + snapshot).
 - Utilidades one-time (backfills históricos): `backfillJackieTasks`, `backfillFromSalesPipeline`, `undoBackfill_Pipeline2`, `auditPipelineStages`, `diagnoseSalesPipeline20`.
 
 ### 10.3. `Config.gs` — credenciales y migraciones de columnas

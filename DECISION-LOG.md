@@ -9,6 +9,22 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 ---
 
+## 2026-08-10 — History respeta refunds/inactivos (consistencia con Analytics en vivo)
+
+**Qué se cambió (backend `GHL.gs`, `computeChallengeSummary_`):**
+- Ahora **espeja `computeFunnel`**: excluye `Refunded` e `Marked Inactive` del funnel + purchases + revenue; netea la cuota de `Courtesy Refund`. Antes contaba TODA compra sin mirar flags → los challenges archivados sobre-contaban purchases y revenue.
+- Nuevos campos en el summary: `refunded`, `refundRev`, `courtesyRefund`, `courtesyRev`, `inactive`. `totalRev` ahora netea refunds+courtesy.
+
+**Por qué:** el tab History mostraba 5 purchases en julio, pero 2 no eran reales: **Peter Berg** (Refunded) y **Anisya Fritz** (Marked Inactive). El Analytics en vivo ya los excluía, pero History no → inconsistencia. Con el fix, julio = **3** (Allie, Susan, Libbey-courtesy).
+
+**Regla de datos (documentada):** para quien **nunca participó** (compró y se le hizo refund antes de empezar, sin pasar por el funnel del challenge — ej. **Peter Berg**, que se fue directo a 1-on-1 por su cuenta) → **borrar la fila** del `Historical` a mano (Bernardo), porque si solo se marca `Refunded` seguiría contando en "Enrolled". Para refunds/inactivos de gente que **sí participó** → usar los flags (los maneja este fix). Su venta 1-on-1 no se pierde: vive en Stripe/GHL/Mastersheet. Backup: tab `Pre-Archive`.
+
+**Setup / deploy:** pegar `GHL.gs` completo → **Manage deployments → Edit → New version**. Bernardo además borra la fila de Peter en `Historical`.
+
+**Archivos / commits:** GHL.gs (fuera de git) · DASHBOARD-SYSTEM.md + DECISION-LOG.md · <hash>
+
+---
+
 ## 2026-08-10 — Nuevo tab "Calls" (agenda) separado de Accountability
 
 **Qué se cambió (frontend `index.html`):**
