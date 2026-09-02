@@ -490,6 +490,7 @@ Ver §10.4. El intake form ya **no** se llena en Everfit — ahora es un **Googl
 - [ ] **CacheService ~100KB por key.**
 - [ ] **Git identity sin configurar** — cada commit tira warning `bernardo lopez <bernardolopez@iMac-de-bernardo.local>`. No bloquea. (Los commits históricos dicen `Co-Authored-By: Claude Opus 4.7`.)
 - [ ] Para bugs de **lógica/data** pegar texto (logs/errores), no screenshots; screenshots solo para bugs de **UI** (mucho más barato en tokens).
+- [ ] **Todos los saves POST pasan por `scriptPost(payload, opts)`** (junto a `SCRIPT_URL`). Apps Script a veces devuelve una **página HTML** de error (rate limit / error transitorio) en vez de JSON; el helper valida que la respuesta sea JSON (nunca muestra el `Unexpected token '<'` crudo) y **reintenta con backoff** (300/800/1500 ms) SOLO para acciones **idempotentes** (recordEvent/clearEvent/updateProperty/recordHistorical). Para las **no-idempotentes** (`createNote`, `bookAppointment`, `archiveChallenge`) va con **`{ retry: false }`** para no duplicar notas/citas ni re-archivar. Si agregas un save nuevo, úsalo (no `fetch(SCRIPT_URL,...)` + `res.json()` directo).
 
 ---
 

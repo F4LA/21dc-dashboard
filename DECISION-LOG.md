@@ -9,6 +9,20 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 ---
 
+## 2026-08-10 — Saves resilientes a respuestas HTML de Apps Script (`scriptPost`)
+
+**Qué se cambió (frontend `index.html`):**
+- Nuevo helper **`scriptPost(payload, opts)`** que centraliza TODOS los POST al endpoint. Apps Script a veces devuelve una **página HTML** de error (rate limit / error transitorio, sobre todo bajo saves rápidos y seguidos) y el viejo `res.json()` explotaba con `Unexpected token '<', "<!DOCTYPE "...`. El helper: (1) lee como texto y solo acepta si **parece JSON** (nunca muestra el error crudo), (2) **reintenta con backoff** 300/800/1500 ms, (3) si todo falla lanza un mensaje legible ("…please try again in a moment").
+- **Los 24 call sites** POST migrados a `scriptPost` (antes cada uno hacía `fetch(SCRIPT_URL,…)` + `res.json()`). Verificado: 0 POST directos restantes (solo el fetch interno del helper).
+
+**Decisión clave (idempotencia):** el **auto-retry solo aplica a acciones idempotentes** (recordEvent/clearEvent/updateProperty/recordHistorical — reescriben la misma celda, reintentar es inocuo). Para las **no-idempotentes** se pasa **`{ retry: false }`**: `createNote` (×2), `bookAppointment` (×4) y `archiveChallenge` — reintentarlas podría **duplicar notas/citas o re-archivar**. Esas siguen con manejo JSON-safe (mensaje legible, sin auto-retry).
+
+**Por qué:** el save fallaba intermitentemente tras varios marks seguidos (Welcome, Login Reachout, etc.) y le tiraba el error crudo al usuario. No se tocó el backend ni cómo se guarda la data — solo se hizo el cliente resiliente.
+
+**Archivos / commits:** index.html · <hash>
+
+---
+
 ## 2026-08-10 — History respeta refunds/inactivos (consistencia con Analytics en vivo)
 
 **Qué se cambió (backend `GHL.gs`, `computeChallengeSummary_`):**

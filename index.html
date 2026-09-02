@@ -1385,6 +1385,47 @@
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbztuKTnQ75TyLWYQPsF1YHhMflMtTCLjT30nkeeq0RFt5c5_3Ot-wiKMl484V0ca2oA/exec';
 
+// ── Resilient POST to the Apps Script endpoint ────────────
+// Apps Script intermittently returns an HTML error page (transient error /
+// concurrent-execution rate limit) instead of JSON — most often under rapid
+// successive saves. Calling res.json() on that HTML throws the cryptic
+// "Unexpected token '<', <!DOCTYPE ..." error. This helper:
+//   1) reads the body as text and only accepts it if it actually looks like
+//      JSON (never surfaces the raw parse error to the user);
+//   2) for idempotent writes, retries with backoff (300 / 800 / 1500 ms);
+//   3) on total failure, throws a short human-readable message.
+// Retry is DISABLED (opts.retry === false) for non-idempotent actions
+// (createNote, bookAppointment, archiveChallenge) so a transient failure can
+// never silently create a duplicate note/appointment or re-run an archive.
+// It only makes the CLIENT resilient — the stored data + backend are untouched.
+async function scriptPost(bodyObj, opts) {
+  const retry = !(opts && opts.retry === false);
+  const delays = retry ? [300, 800, 1500] : [];
+  let lastErr = null;
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, delays[attempt - 1]));
+    try {
+      const res = await fetch(SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(bodyObj)
+      });
+      const text = await res.text();
+      const trimmed = (text || '').trim();
+      if (res.ok && (trimmed.charAt(0) === '{' || trimmed.charAt(0) === '[')) {
+        try { return JSON.parse(trimmed); }
+        catch (e) { lastErr = e; }               // looked like JSON but wasn't
+      } else {
+        lastErr = new Error('non-JSON response (HTTP ' + res.status + ')');
+      }
+    } catch (e) {
+      lastErr = e;                                // network/transport error
+    }
+  }
+  try { console.warn('scriptPost failed after retries:', lastErr && lastErr.message); } catch(_) {}
+  throw new Error('please try again in a moment');
+}
+
 // ── Stage styles ──────────────────────────────────────────
 const STAGE_STYLE = {
   'Participant':       { bg:'#e0e7ff', text:'#4338ca', dot:'#6366f1' },
@@ -3473,16 +3514,12 @@ async function recordExternal(email, column, hostId, btn) {
   statusEl.innerHTML = '';
 
   try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'recordHistoricalEvent',
-        email: email,
-        column: column,
-        timestamp: new Date().toISOString()
-      })
+    const json = await scriptPost({
+      action: 'recordHistoricalEvent',
+      email: email,
+      column: column,
+      timestamp: new Date().toISOString()
     });
-    const json = await res.json();
     if (!json.success) throw new Error(json.error || 'Save failed');
 
     statusEl.innerHTML = `<div class="ext-panel-status success">✓ Recorded as <strong>${esc(column)}</strong> in challenge ${esc(json.data.challenge)}</div>`;
@@ -4168,19 +4205,15 @@ async function confirmDay4Book(email) {
   if (statusEl) statusEl.innerHTML = '';
   try {
     const nameParts = (p.name || '').trim().split(/\s+/);
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'bookAppointment',
-        callType: 'CC',
-        email: p.email,
-        firstName: nameParts[0] || '',
-        lastName: nameParts.slice(1).join(' ') || '',
-        startTime: state.slot,
-        userId: state.userId || null
-      })
-    });
-    const json = await res.json();
+    const json = await scriptPost({
+      action: 'bookAppointment',
+      callType: 'CC',
+      email: p.email,
+      firstName: nameParts[0] || '',
+      lastName: nameParts.slice(1).join(' ') || '',
+      startTime: state.slot,
+      userId: state.userId || null
+    }, { retry: false });
     if (!json.success) throw new Error(json.error || 'Booking failed');
     if (statusEl) statusEl.innerHTML = `<div class="resched-status success">✓ Booked. Refreshing…</div>`;
     btn.textContent = '✓ Booked';
@@ -4233,19 +4266,14 @@ async function markOnboardingSent(email, type, btn) {
   }, 700);
 
   try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({
-        action: 'recordEvent',
-        email: p.email,
-        column: columnName,
-        firstName: nameParts[0] || '',
-        lastName: nameParts.slice(1).join(' ') || '',
-        timestamp: nowIso
-      })
+    const json = await scriptPost({
+      action: 'recordEvent',
+      email: p.email,
+      column: columnName,
+      firstName: nameParts[0] || '',
+      lastName: nameParts.slice(1).join(' ') || '',
+      timestamp: nowIso
     });
-    const json = await res.json();
     if (!json.success) throw new Error(json.error || 'Save error');
   } catch(err) {
     p.sheetData[columnName] = prev;
@@ -5055,16 +5083,11 @@ async function markAsNotLoggedInToEverfit() {
   else if (activeView === 'accountability') renderAccountability();
 
   try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({
-        action: 'clearEvent',
-        email: target.email,
-        column: 'Login to Everfit'
-      })
+    const json = await scriptPost({
+      action: 'clearEvent',
+      email: target.email,
+      column: 'Login to Everfit'
     });
-    const json = await res.json();
     if (!json.success) throw new Error(json.error || 'Save error');
   } catch(err) {
     target.sheetData['Login to Everfit'] = prev;
@@ -5098,19 +5121,14 @@ async function markLoggedInToEverfit() {
   else if (activeView === 'accountability') renderAccountability();
 
   try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({
-        action: 'recordEvent',
-        email: target.email,
-        column: 'Login to Everfit',
-        firstName: nameParts[0] || '',
-        lastName: nameParts.slice(1).join(' ') || '',
-        timestamp: nowIso
-      })
+    const json = await scriptPost({
+      action: 'recordEvent',
+      email: target.email,
+      column: 'Login to Everfit',
+      firstName: nameParts[0] || '',
+      lastName: nameParts.slice(1).join(' ') || '',
+      timestamp: nowIso
     });
-    const json = await res.json();
     if (!json.success) throw new Error(json.error || 'Save error');
   } catch(err) {
     target.sheetData['Login to Everfit'] = prev;
@@ -5259,18 +5277,14 @@ async function manualMarkBooking(column) {
   else if (activeView === 'today') renderOnboarding();   // renderOnboarding now includes the Action Queue
 
   try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'recordEvent',
-        email: target.email,
-        column: column,
-        timestamp: nowIso,
-        firstName: (target.name || '').split(' ')[0] || '',
-        lastName: (target.name || '').split(' ').slice(1).join(' ') || ''
-      })
+    const json = await scriptPost({
+      action: 'recordEvent',
+      email: target.email,
+      column: column,
+      timestamp: nowIso,
+      firstName: (target.name || '').split(' ')[0] || '',
+      lastName: (target.name || '').split(' ').slice(1).join(' ') || ''
     });
-    const json = await res.json();
     if (!json.success) throw new Error(json.error || 'Failed');
     closeModal();
     setTimeout(() => loadData(), 300);
@@ -5356,18 +5370,10 @@ async function markCourtesyRefund() {
   else if (activeView === 'analytics') renderAnalytics();
 
   try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST', headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'recordEvent', email: target.email, column: 'Courtesy Refund', firstName: nameParts[0] || '', lastName: nameParts.slice(1).join(' ') || '', timestamp: nowIso })
-    });
-    const json = await res.json();
+    const json = await scriptPost({ action: 'recordEvent', email: target.email, column: 'Courtesy Refund', firstName: nameParts[0] || '', lastName: nameParts.slice(1).join(' ') || '', timestamp: nowIso });
     if (!json.success) throw new Error(json.error || 'Save error');
     if (hadHardRefund) {
-      const res2 = await fetch(SCRIPT_URL, {
-        method: 'POST', headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'clearEvent', email: target.email, column: 'Refunded' })
-      });
-      const json2 = await res2.json();
+      const json2 = await scriptPost({ action: 'clearEvent', email: target.email, column: 'Refunded' });
       if (!json2.success) throw new Error(json2.error || 'Save error');
     }
   } catch(err) {
@@ -5396,11 +5402,7 @@ async function clearCourtesyRefund() {
   else if (activeView === 'analytics') renderAnalytics();
 
   try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST', headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'clearEvent', email: target.email, column: 'Courtesy Refund' })
-    });
-    const json = await res.json();
+    const json = await scriptPost({ action: 'clearEvent', email: target.email, column: 'Courtesy Refund' });
     if (!json.success) throw new Error(json.error || 'Save error');
   } catch(err) {
     if (!target.sheetData) target.sheetData = {};
@@ -5641,19 +5643,15 @@ async function confirmReschedule() {
   statusEl.innerHTML = '';
 
   try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'bookAppointment',
-        callType: __reschedState.callType,
-        email: activeContact.email,
-        firstName: (activeContact.name || '').split(' ')[0] || '',
-        lastName: (activeContact.name || '').split(' ').slice(1).join(' ') || '',
-        startTime: __reschedState.slot,
-        userId: __reschedState.userId || null
-      })
-    });
-    const json = await res.json();
+    const json = await scriptPost({
+      action: 'bookAppointment',
+      callType: __reschedState.callType,
+      email: activeContact.email,
+      firstName: (activeContact.name || '').split(' ')[0] || '',
+      lastName: (activeContact.name || '').split(' ').slice(1).join(' ') || '',
+      startTime: __reschedState.slot,
+      userId: __reschedState.userId || null
+    }, { retry: false });
     if (!json.success) throw new Error(json.error || 'Booking failed');
 
     statusEl.innerHTML = `
@@ -5825,19 +5823,15 @@ async function confirmFollowUp() {
   statusEl.innerHTML = '';
 
   try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'bookAppointment',
-        callType: 'FU',
-        email: activeContact.email,
-        firstName: (activeContact.name || '').split(' ')[0] || '',
-        lastName: (activeContact.name || '').split(' ').slice(1).join(' ') || '',
-        startTime: __fuState.slot,
-        userId: __fuState.userId || null
-      })
-    });
-    const json = await res.json();
+    const json = await scriptPost({
+      action: 'bookAppointment',
+      callType: 'FU',
+      email: activeContact.email,
+      firstName: (activeContact.name || '').split(' ')[0] || '',
+      lastName: (activeContact.name || '').split(' ').slice(1).join(' ') || '',
+      startTime: __fuState.slot,
+      userId: __fuState.userId || null
+    }, { retry: false });
     if (!json.success) throw new Error(json.error || 'Booking failed');
 
     statusEl.innerHTML = `
@@ -5991,19 +5985,15 @@ async function confirmBookDc() {
   statusEl.innerHTML = '';
 
   try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'bookAppointment',
-        callType: 'DC',
-        email: activeContact.email,
-        firstName: (activeContact.name || '').split(' ')[0] || '',
-        lastName: (activeContact.name || '').split(' ').slice(1).join(' ') || '',
-        startTime: __bookDcState.slot,
-        userId: __bookDcState.userId || null
-      })
-    });
-    const json = await res.json();
+    const json = await scriptPost({
+      action: 'bookAppointment',
+      callType: 'DC',
+      email: activeContact.email,
+      firstName: (activeContact.name || '').split(' ')[0] || '',
+      lastName: (activeContact.name || '').split(' ').slice(1).join(' ') || '',
+      startTime: __bookDcState.slot,
+      userId: __bookDcState.userId || null
+    }, { retry: false });
     if (!json.success) throw new Error(json.error || 'Booking failed');
 
     statusEl.innerHTML = `
@@ -6076,16 +6066,12 @@ async function markInactive() {
   else if (activeView === 'accountability') renderAccountability();
 
   try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'recordEvent',
-        email: target.email,
-        column: 'Marked Inactive',
-        timestamp: nowIso
-      })
+    const json = await scriptPost({
+      action: 'recordEvent',
+      email: target.email,
+      column: 'Marked Inactive',
+      timestamp: nowIso
     });
-    const json = await res.json();
     if (!json.success) throw new Error(json.error || 'Failed');
   } catch(err) {
     // Revert
@@ -6110,15 +6096,11 @@ async function clearInactive() {
   if (activeView === 'tracker') renderTable();
 
   try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'clearEvent',
-        email: target.email,
-        column: 'Marked Inactive'
-      })
+    const json = await scriptPost({
+      action: 'clearEvent',
+      email: target.email,
+      column: 'Marked Inactive'
     });
-    const json = await res.json();
     if (!json.success) throw new Error(json.error || 'Failed');
   } catch(err) {
     if (target.sheetData) target.sheetData['Marked Inactive'] = prev;
@@ -6151,19 +6133,14 @@ async function markRefunded() {
   else if (activeView === 'analytics') renderAnalytics();
 
   try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({
-        action: 'recordEvent',
-        email: target.email,
-        column: 'Refunded',
-        firstName: nameParts[0] || '',
-        lastName: nameParts.slice(1).join(' ') || '',
-        timestamp: nowIso
-      })
+    const json = await scriptPost({
+      action: 'recordEvent',
+      email: target.email,
+      column: 'Refunded',
+      firstName: nameParts[0] || '',
+      lastName: nameParts.slice(1).join(' ') || '',
+      timestamp: nowIso
     });
-    const json = await res.json();
     if (!json.success) throw new Error(json.error || 'Save error');
   } catch(err) {
     target.sheetData['Refunded'] = prev;
@@ -6191,16 +6168,11 @@ async function undoRefund() {
   else if (activeView === 'analytics') renderAnalytics();
 
   try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({
-        action: 'clearEvent',
-        email: target.email,
-        column: 'Refunded'
-      })
+    const json = await scriptPost({
+      action: 'clearEvent',
+      email: target.email,
+      column: 'Refunded'
     });
-    const json = await res.json();
     if (!json.success) throw new Error(json.error || 'Save error');
   } catch(err) {
     if (!target.sheetData) target.sheetData = {};
@@ -6289,12 +6261,7 @@ async function markOptedOut() {
   try {
     // 1) Save the reason as a GHL note (auditability) — mandatory per SOP.
     const noteBody = '[Opt-Out · ' + author + '] ' + reason;
-    const noteRes = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'createNote', contactId: target.contactId || null, email: target.email, body: noteBody })
-    });
-    const noteJson = await noteRes.json();
+    const noteJson = await scriptPost({ action: 'createNote', contactId: target.contactId || null, email: target.email, body: noteBody }, { retry: false });
     if (!noteJson.success) throw new Error(noteJson.error || 'Note save failed');
     // Reflect the note optimistically in the open modal
     if (Array.isArray(target.allNotes)) {
@@ -6304,15 +6271,10 @@ async function markOptedOut() {
       if (activeContact === target) renderNotes(target.allNotes);
     }
     // 2) Mark the 'Opted Out' column
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({
-        action: 'recordEvent', email: target.email, column: 'Opted Out',
-        firstName: nameParts[0] || '', lastName: nameParts.slice(1).join(' ') || '', timestamp: nowIso
-      })
+    const json = await scriptPost({
+      action: 'recordEvent', email: target.email, column: 'Opted Out',
+      firstName: nameParts[0] || '', lastName: nameParts.slice(1).join(' ') || '', timestamp: nowIso
     });
-    const json = await res.json();
     if (!json.success) throw new Error(json.error || 'Save error');
   } catch(err) {
     // Revert the flag (a saved note is harmless — it stays as an audit trail)
@@ -6340,12 +6302,7 @@ async function clearOptedOut() {
   else if (activeView === 'analytics') renderAnalytics();
 
   try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'clearEvent', email: target.email, column: 'Opted Out' })
-    });
-    const json = await res.json();
+    const json = await scriptPost({ action: 'clearEvent', email: target.email, column: 'Opted Out' });
     if (!json.success) throw new Error(json.error || 'Save error');
   } catch(err) {
     if (!target.sheetData) target.sheetData = {};
@@ -6456,17 +6413,12 @@ async function saveNote() {
   btn.textContent = 'Saving…';
 
   try {
-    const res  = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({
-        action: 'createNote',
-        contactId: activeContact.contactId || null,
-        email:     activeContact.email,
-        body
-      })
-    });
-    const json = await res.json();
+    const json = await scriptPost({
+      action: 'createNote',
+      contactId: activeContact.contactId || null,
+      email:     activeContact.email,
+      body
+    }, { retry: false });
     if (!json.success) throw new Error(json.error || 'Save error');
 
     // Optimistic update — only notes change here.
@@ -6651,19 +6603,14 @@ async function markEvent(column) {
 
   // ── Send to backend (no reload — change already visible) ────
   try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({
-        action: 'recordEvent',
-        email: target.email,
-        column: column,
-        firstName: firstName,
-        lastName: lastName,
-        timestamp: nowIso
-      })
+    const json = await scriptPost({
+      action: 'recordEvent',
+      email: target.email,
+      column: column,
+      firstName: firstName,
+      lastName: lastName,
+      timestamp: nowIso
     });
-    const json = await res.json();
     if (!json.success) throw new Error(json.error || 'Save error');
   } catch(err) {
     // Revert optimistic update
@@ -6714,12 +6661,7 @@ async function saveActiveMonth() {
   const btn = document.getElementById('settings-active-month-btn');
   btn.disabled = true; btn.textContent = 'Saving…';
   try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'updateActiveChallengeMonth', month: month })
-    });
-    const json = await res.json();
+    const json = await scriptPost({ action: 'updateActiveChallengeMonth', month: month });
     if (!json.success) throw new Error(json.error || 'Save failed');
     btn.textContent = 'Save'; btn.disabled = false;
     closeSettings();
@@ -6768,12 +6710,7 @@ async function archiveChallenge() {
   btn.disabled = true; btn.textContent = 'Archiving…';
 
   try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'archiveChallenge', challenge: name })
-    });
-    const json = await res.json();
+    const json = await scriptPost({ action: 'archiveChallenge', challenge: name }, { retry: false });
     if (!json.success) throw new Error(json.error || 'Archive error');
 
     const preservedLine = json.data.preserved > 0
@@ -6800,12 +6737,7 @@ async function saveStartDate() {
   const btn = document.getElementById('settings-save-btn');
   btn.disabled = true; btn.textContent = 'Saving…';
   try {
-    const res  = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'updateChallengeStartDate', date })
-    });
-    const json = await res.json();
+    const json = await scriptPost({ action: 'updateChallengeStartDate', date });
     if (!json.success) throw new Error(json.error || 'Error');
     document.getElementById('settings-saved').style.display = 'inline';
     btn.textContent = 'Save'; btn.disabled = false;
