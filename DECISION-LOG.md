@@ -19,7 +19,7 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 **Por qué:** el save fallaba intermitentemente tras varios marks seguidos (Welcome, Login Reachout, etc.) y le tiraba el error crudo al usuario. No se tocó el backend ni cómo se guarda la data — solo se hizo el cliente resiliente.
 
-**Archivos / commits:** index.html · <hash>
+**Archivos / commits:** index.html · 0368902
 
 ---
 
