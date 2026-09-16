@@ -9,6 +9,21 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 ---
 
+## 2026-09-16 — Today "Calls Today": status derivado del stage (fin de falsos "Needs update")
+
+**Qué se cambió** (`index.html`, frontend). El badge Processed/Needs update de las cards de **Today → Calls Today** dejó de calcularse con el heurístico por timestamp `hasStageAdvancedAfter(p, callType, eventEndMs)` (que exigía `ts > eventEndMs`) y ahora deriva del **mismo `stageName` que usa el Tracker**, vía la nueva función `callIsProcessed(p, callType)`:
+- Card **Processed** en cuanto el stage salió del "Scheduled" que le corresponde, o hay disposición (`Refunded` / `Marked Inactive` / `Opted Out` / `No Response`).
+- Card **Needs update** solo mientras el stage siga siendo el "Scheduled" del tipo — CC: `Participant`/`CC - Scheduled`, DC: `DC - Scheduled`, FU: `FU - Scheduled`.
+- Se mantiene intacta la lógica de `Upcoming` / `● Live now` / la etiqueta "Xh ago".
+
+**Por qué.** El heurístico viejo daba **falsos "Needs update"**: los outcomes que se guardan con **fecha sin hora** parsean a medianoche, y `medianoche > hora_fin_de_la_call` es falso, así que participantes ya procesados (mismo stage que otros marcados Processed) aparecían como pendientes. Ejemplo del spec: Kelly DeFonzo y Carolina Solis con data idéntica de DC-Scheduled, una "Processed" y otra "Needs update". La fuente de verdad debe ser el stage (como en el Tracker), no un segundo heurístico paralelo.
+
+**Verificación (data en vivo, 2026-09-16).** Cards CC/DC ya pasadas: **Needs update 5 → 1** (−4 falsos positivos). Flips Needs update → Processed: Kelly DeFonzo (CC, DC - Scheduled), Felice Nelson (CC, Didn't Book DC), Jessica Chorostecki (DC, FU - Scheduled), Cherise Matthews (DC, DC - Cancelled). Sin cambio (correctos): Carolina Solis (Processed), Steven Baldizon (Upcoming). **Nota:** John Wooster —que el spec esperaba en Processed— sigue en `CC - Scheduled` con una **segunda CC agendada más tarde hoy**; su slot pasado genuinamente no tiene outcome logueado, así que tanto el criterio viejo como el nuevo lo dejan en Needs update (es el edge de rebook del §6, que se difiere a propósito). Jan Barinowski no tiene card CC/DC (es Accountability, fuera de scope, sin tocar).
+
+**Fuera de scope (no tocado):** definición de stages, métrica de conversión CC→DC, barra de métricas, conteos de pills, lógica de Accountability, Tracker, modal de participante.
+
+---
+
 ## 2026-08-10 — Saves resilientes a respuestas HTML de Apps Script (`scriptPost`)
 
 **Qué se cambió (frontend `index.html`):**

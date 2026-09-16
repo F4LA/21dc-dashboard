@@ -3373,7 +3373,7 @@ function renderTodayEventCard(ev) {
     cardClass = 'in-progress';
     statusBadge = `<span class="today-card-status live">● Live now</span>`;
   } else {
-    const stageAdvanced = hasStageAdvancedAfter(matched, ev.callType, endMs);
+    const stageAdvanced = callIsProcessed(matched, ev.callType);
     if (stageAdvanced) {
       statusBadge = `<span class="today-card-status processed">✓ Processed</span>`;
     } else {
@@ -3534,30 +3534,22 @@ async function recordExternal(email, column, hostId, btn) {
 
 // Returns true if the participant's stage advanced AFTER the event end time
 // (i.e., Dennis logged the outcome). callType = 'CC' | 'DC' | 'FU'
-function hasStageAdvancedAfter(p, callType, eventEndMs) {
-  const sd = p.sheetData || {};
-  let advanceCols;
-  if (callType === 'CC') {
-    // "Didn't Book DC" is intentionally NOT in this list — it fires days later
-    // when the challenge ends and the participant never scheduled a DC. A CC
-    // card that ended a few hours ago and still hasn't been logged shouldn't
-    // silently flip to "Processed" just because that post-challenge automation
-    // ran. Real CC outcomes are Cancelled, No Show, or DC Scheduled/attended.
-    advanceCols = ['CC Cancelled', 'CC No Show', 'DC Scheduled', 'DC Cancelled', 'DC No Show', 'FU Scheduled', "Didn't Purchase", 'Purchase 101', 'Purchase GC'];
-  } else if (callType === 'DC') {
-    // After a DC, valid advance signals include: stage outcome OR booking a Follow-Up
-    advanceCols = ['DC Cancelled', 'DC No Show', 'FU Scheduled', "Didn't Purchase", 'Purchase 101', 'Purchase GC'];
-  } else {
-    // FU — only terminal outcomes count as advance
-    advanceCols = ["Didn't Purchase", 'Purchase 101', 'Purchase GC'];
-  }
-  for (const col of advanceCols) {
-    if (sd[col]) {
-      const ts = new Date(sd[col]).getTime();
-      if (!isNaN(ts) && ts > eventEndMs) return true;
-    }
-  }
-  return false;
+// Today "Calls Today" card status derives from the SAME stage the Tracker
+// shows (p.stageName, computed by computeStage_ / computeStageLocal) — the
+// single source of truth — not from a separate timestamp comparison. A card is
+// "Processed" once the participant has moved past the scheduled stage that
+// matches the card, or carries a disposition that closes the call out
+// (Refunded, Inactive, Opted Out, No Response). It stays "Needs update" only
+// while the stage is still the matching scheduled stage. Mirrors §4 of the
+// Today status spec. Replaces the old timestamp heuristic (hasStageAdvancedAfter),
+// which false-flagged same-day date-only outcomes stamped at midnight as
+// "Needs update" because midnight < the call's end time.
+function callIsProcessed(p, callType) {
+  if (p.isRefunded || p.isInactive || p.isOptedOut || p.isNoResponse) return true;
+  const stage = p.stageName || '';
+  if (callType === 'CC') return stage !== 'Participant' && stage !== 'CC - Scheduled';
+  if (callType === 'DC') return stage !== 'DC - Scheduled';
+  return stage !== 'FU - Scheduled'; // FU
 }
 
 // ── Action Queue as an obSection (used inside the Today master view) ──

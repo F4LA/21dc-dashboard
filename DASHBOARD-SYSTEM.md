@@ -1,6 +1,6 @@
 # DASHBOARD-SYSTEM — 21DC Dashboard (Strong Standard Coaching)
 
-**Última actualización: 2026-08-10**
+**Última actualización: 2026-09-16**
 
 **Documento vivo · Fuente de verdad permanente · Uso interno**
 Describe cómo funciona el 21DC Dashboard: su arquitectura, cada vista, cada botón, las integraciones, las decisiones y sus porqués. **No es un traspaso puntual** — es la referencia canónica que se mantiene actualizada en cada cambio al dashboard.
@@ -190,7 +190,7 @@ Router: `setView(view)`. `'queue'` y `'onboarding'` redirigen a `'today'`. Arran
    - **Clarity Calls today** (`owner-deniz owner-anthony`)
    - **Discovery Calls today** (`owner-deniz owner-joey`)
    - **Follow-Up Calls today** (`owner-deniz owner-joey`)
-   - Cada card matcheada a participante (por email) → click abre el modal. Badges por ventana real de la call: **Upcoming** / **● Live now** / **✓ Processed** (stage avanzó tras el fin) / **⚠ Needs update** (+ "Xh ago").
+   - Cada card matcheada a participante (por email) → click abre el modal. Badges por ventana real de la call: **Upcoming** (aún no empieza) / **● Live now** (dentro de la ventana) / **✓ Processed** / **⚠ Needs update** (+ "Xh ago"). El badge **Processed vs Needs update** deriva del **mismo `stageName` que usa el Tracker** (única fuente de verdad), vía `callIsProcessed(p, callType)`: la card es Processed en cuanto el stage salió del stage "Scheduled" que le corresponde (o hay disposición Refunded/Inactive/Opted Out/No Response), y solo se queda en Needs update mientras el stage siga siendo el "Scheduled" del tipo (CC: `Participant`/`CC - Scheduled`; DC: `DC - Scheduled`; FU: `FU - Scheduled`). Reemplazó el heurístico viejo por timestamp (`hasStageAdvancedAfter`, `ts > eventEndMs`) que daba falsos "Needs update" cuando el outcome se guardaba con **fecha sin hora** (medianoche < hora de la call). Edge de rebook (§6 del spec) se difiere a propósito: el criterio por stage resuelve el 100% de la data en vivo.
    - Cards **externas** (email no está en Participants, ej. rebook de un challenge pasado): badge "External call"; si la call ya terminó → "⚠ Update past challenge" clicable → panel inline "Update Past Challenge" que escribe a `Historical` (ver §6).
    - `getTodayCalls` lee CC de **dos** calendarios (público + admin override) y **dedupea por event ID**. Filtro estricto al día actual (defensa contra timezone de GHL).
 4. **⚡ Actions Today** (obSection maestra, default colapsada) con 6 sub-secciones (todo card-based, no tablas):
@@ -206,7 +206,7 @@ Router: `setView(view)`. `'queue'` y `'onboarding'` redirigen a `'today'`. Arran
 
 - `renderAccountability()` con estas secciones (**solo accountability real** — "¿el equipo hizo su trabajo?". Los "coming up" se movieron a su propio tab **Calls**, ver §5.3b):
   - **"Calls — happened, not updated"**: participantes en `CC/DC/FU - Scheduled` cuya call **ya terminó hace 1h+** (ventana de 7 días) y siguen en Scheduled → el closer no marcó el resultado. **Llena un hueco:** Accountability antes solo veía la reschedule cadence (que requiere un cancel/no-show ya marcado), nunca una call agendada que simplemente no se tocó. `getAllScheduledCalls().needsUpdate`.
-  - **Prompt post-llamada (closer):** el marcar resultado ya existe en **Today → Calls Today** (badge "⚠ Needs update" cuando la call terminó y el stage no avanzó; para FU solo cuenta como "✓ Processed" al marcar `Purchase 101/GC` o `Didn't Purchase` — `hasStageAdvancedAfter`). **Regla del FU:** no-show o cancel de un Follow-Up → se marca **`Didn't Purchase`** (no hay stages FU No Show/Cancelled). Ojo: `Didn't Purchase` es terminal duro, así que un rebook posterior **no** reaparece solo; caso raro, se maneja a mano.
+  - **Prompt post-llamada (closer):** el marcar resultado ya existe en **Today → Calls Today** (badge "⚠ Needs update" cuando la call terminó y el stage no avanzó; para FU solo cuenta como "✓ Processed" cuando el stage deja de ser `FU - Scheduled`, i.e. al marcar `Purchase 101/GC` o `Didn't Purchase` — `callIsProcessed`). **Regla del FU:** no-show o cancel de un Follow-Up → se marca **`Didn't Purchase`** (no hay stages FU No Show/Cancelled). Ojo: `Didn't Purchase` es terminal duro, así que un rebook posterior **no** reaparece solo; caso raro, se maneja a mano.
   - **"Dennis — open follow-ups"**: reschedule cadence stale 48h+ (DM, Call #1, Call #2, Offer Doc). `getDennisFlags()`.
   - **"Gabi — open follow-ups"**: onboarding outreach stale 48h+ (Login Reachout, Welcome, o CC booking overdue). `getJackieFlags()` (nombre interno legacy = "Jackie", ya no renombrado).
 - Buffer: 48h desde el evento (24h para actuar + 24h antes de que el flag llegue a Bernardo). Filtrado a `isActiveCohort`. Excluye refunded/inactive.
