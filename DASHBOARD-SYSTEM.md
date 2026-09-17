@@ -1,6 +1,6 @@
 # DASHBOARD-SYSTEM — 21DC Dashboard (Strong Standard Coaching)
 
-**Última actualización: 2026-09-16**
+**Última actualización: 2026-09-17**
 
 **Documento vivo · Fuente de verdad permanente · Uso interno**
 Describe cómo funciona el 21DC Dashboard: su arquitectura, cada vista, cada botón, las integraciones, las decisiones y sus porqués. **No es un traspaso puntual** — es la referencia canónica que se mantiene actualizada en cada cambio al dashboard.
@@ -65,7 +65,7 @@ Herramienta interna de operaciones para el **21-Day Challenge** de Strong Standa
 - **Escrituras:**
   - Botones de stage/onboarding/outreach → **Google Sheet Participants** (vía `recordEvent`/`clearEvent`).
   - "Add note" en el modal → **GHL** (nota en el contacto, para auditabilidad).
-  - Booking de citas (Reschedule / Book DC / Book FU / Book CC) → **GHL Calendar** (crea appointment real) **y además escribe la columna Scheduled correspondiente al sheet** (`CC Scheduled` / `DC Scheduled` / `FU Scheduled`) vía `recordEvent_`. **(Fix 2026-08-10:** antes solo el FU escribía al sheet; CC/DC dependían de una automatización de GHL que no dispara confiablemente en citas creadas por API → DC agendados salían como "no agendados". Ahora el dashboard lo registra directo.)
+  - Booking de citas (Reschedule / Book DC / Book FU / Book CC) → **GHL Calendar** (crea appointment real) **y además escribe la columna Scheduled correspondiente al sheet** (`CC Scheduled` / `DC Scheduled` / `FU Scheduled`) vía `recordEvent_`. **(Fix 2026-08-10:** antes solo el FU escribía al sheet; CC/DC dependían de una automatización de GHL que no dispara confiablemente en citas creadas por API → DC agendados salían como "no agendados". Ahora el dashboard lo registra directo.) **(Fix 2026-09-17:** la duración de la cita ya **no se adivina** — GHL rechazaba con 400 "Selected slot duration is not a valid duration option" cuando la duración enviada (default 60 min en DC) no coincidía con la configurada en el calendario. Ahora `bookAppointment` lee la **duración real del calendario** vía `getCalendarSlotMinutes_`; si no se puede leer, omite `endTime` para que GHL la derive de su propia config. Aplica a CC/DC/FU.)
   - Update Past Challenge → **Google Sheet Historical**.
   - Montos/refunds/coach cost → **se leen del Mastersheet** (enrichment on-read); un writer opcional los copia al sheet sin sobrescribir.
 

@@ -9,6 +9,22 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 ---
 
+## 2026-09-17 — Booking falla con GHL 400 "Selected slot duration is not a valid duration option" (backend `Code.gs`)
+
+**Síntoma.** Al agendar un Discovery Call desde el dashboard (le pasó a Deniz y a Bernardo), GHL rechazaba con `400 { "message":"Selected slot duration is not a valid duration option for this calendar" }`. Los slots se mostraban bien; el fallo era al crear la cita.
+
+**Causa raíz.** `createAppointment_` mandaba un `endTime` calculado con una **duración fija** (`DC_DURATION_MIN` de Script Properties o default **60 min**). GHL exige que la duración de la cita sea **una de las opciones configuradas en el calendario**; como 60 min no era una opción válida del calendario de DC, rechazaba. No tenía relación con el team member recién agregado.
+
+**Fix.** La duración deja de adivinarse: el **calendario es la fuente de verdad**.
+- Nuevo `getCalendarSlotMinutes_(calendarId)`: lee `slotDuration` + `slotDurationUnit` del calendario (GET `/calendars/{id}`, cacheado por ejecución) y devuelve minutos.
+- `bookAppointment`: `duration = getCalendarSlotMinutes_(cal)` → si no, el Script Property override → si no, `0`.
+- `createAppointment_`: solo fija `endTime` cuando hay una duración válida (>0); si es 0, **omite `endTime`** y deja que GHL lo derive de su propia config (siempre una opción válida). Aplica a CC, DC y FU.
+- Extra: `doPost` ahora loguea el error atrapado (`Logger.log('doPost "<action>" failed: …')`) para que fallos futuros sean visibles en Apps Script → Executions (antes se perdían porque el catch devolvía `{success:false}` y la ejecución quedaba como "Completed").
+
+**Deploy.** Backend `Code.gs` → Manage deployments → Edit (lápiz) → New version → Deploy (nunca New deployment). Verificación: un booking de prueba con otro participante (no re-agendar a alguien ya agendado, crearía duplicado).
+
+---
+
 ## 2026-09-16 — Today "Calls Today": status derivado del stage (fin de falsos "Needs update")
 
 **Qué se cambió** (`index.html`, frontend). El badge Processed/Needs update de las cards de **Today → Calls Today** dejó de calcularse con el heurístico por timestamp `hasStageAdvancedAfter(p, callType, eventEndMs)` (que exigía `ts > eventEndMs`) y ahora deriva del **mismo `stageName` que usa el Tracker**, vía la nueva función `callIsProcessed(p, callType)`:
