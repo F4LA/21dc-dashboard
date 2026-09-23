@@ -19,7 +19,7 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 **Por qué:**
 - D49 cambia el Macro Engine: piso de comodidad (BMR + 10%), déficit mínimo de 300 cal y tope en BMR. Todo intake completo sale `READY TO ASSIGN` y el status `BERNARDO REVIEW` deja de existir para respuestas nuevas.
 
-**Archivos / commits:** index.html · (pendiente)
+**Archivos / commits:** index.html · 6b0015d
 
 ---
 
