@@ -9,6 +9,20 @@ Registro cronológico de decisiones y cambios al dashboard (frontend `index.html
 
 ---
 
+## 2026-09-23 — Intake Form: se retira el bucket Need Review (D49)
+
+**Qué se cambió:**
+- Se eliminó el bucket 🟡 Need Review de la sección Intake Form (`getIntakeReview`, `renderIntakeReviewCard` y sus estilos). Quedan 🟢 Ready to Assign y ⚪ Intake Pending.
+- Filas históricas del Setup Sheet con status `BERNARDO REVIEW` no caen en ningún bucket y se ignoran sin error.
+- El Flag del Setup Sheet (nota de qué regla de calorías actuó) no se muestra a Gabi.
+
+**Por qué:**
+- D49 cambia el Macro Engine: piso de comodidad (BMR + 10%), déficit mínimo de 300 cal y tope en BMR. Todo intake completo sale `READY TO ASSIGN` y el status `BERNARDO REVIEW` deja de existir para respuestas nuevas.
+
+**Archivos / commits:** index.html · 6b0015d
+
+---
+
 ## 2026-09-17 — Booking falla con GHL 400 "Selected slot duration is not a valid duration option" (backend `Code.gs`)
 
 **Síntoma.** Al agendar un Discovery Call desde el dashboard (le pasó a Deniz y a Bernardo), GHL rechazaba con `400 { "message":"Selected slot duration is not a valid duration option for this calendar" }`. Los slots se mostraban bien; el fallo era al crear la cita.
