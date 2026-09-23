@@ -695,7 +695,6 @@
       gap: 8px;
     }
     .intake-group-header.ready   { background: #dcfce7; color: #166534; }
-    .intake-group-header.review  { background: #fef3c7; color: #92400e; }
     .intake-group-header.pending { background: #f3f4f6; color: #4b5563; }
     .intake-group-sub { font-weight: 400; font-size: 12px; opacity: 0.85; }
     .intake-card {
@@ -710,7 +709,6 @@
       margin-bottom: 8px;
     }
     .intake-card.ready  { border-left: 4px solid #22c55e; }
-    .intake-card.review { border-left: 4px solid #f59e0b; }
     .intake-card.pending { border-left: 4px solid #9ca3af; }
     .intake-card-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
     .intake-card-meta { min-width: 0; flex: 1; }
@@ -1801,8 +1799,9 @@ function hasCrossover() {
 // Intake Form classification helpers.
 // All three categories require: logged in to Everfit, not refunded/inactive,
 // and not yet fully set up in Everfit (Training + Calories both done).
-// The Macro Engine status ("READY TO ASSIGN" / "BERNARDO REVIEW") decides
-// which bucket; absence of intake form submission lands them in "Pending".
+// The Macro Engine status "READY TO ASSIGN" lands them in "Ready"; absence of
+// intake form submission lands them in "Pending". D49 retired BERNARDO REVIEW:
+// historical rows with that status (past cohorts) match neither and are skipped.
 function isParticipantInIntakeFlow(p) {
   if (p.isRefunded || p.isInactive) return false;
   const sd = p.sheetData || {};
@@ -1816,14 +1815,6 @@ function getIntakeReady() {
     const d = (window.__intakeMacroByEmail || {})[(p.email || '').toLowerCase()];
     if (!d || !d.macro || !d.macro.found) return false;
     return String(d.macro.status || '').toUpperCase().indexOf('READY') >= 0;
-  });
-}
-function getIntakeReview() {
-  return participants.filter(p => {
-    if (!isParticipantInIntakeFlow(p)) return false;
-    const d = (window.__intakeMacroByEmail || {})[(p.email || '').toLowerCase()];
-    if (!d || !d.macro || !d.macro.found) return false;
-    return String(d.macro.status || '').toUpperCase().indexOf('REVIEW') >= 0;
   });
 }
 function getIntakePending() {
@@ -3311,7 +3302,7 @@ function renderTodayContent(wrap, events) {
     actionsCount = getActionQueue().length + getOnboardingNoEverfit().length
                  + getWelcomeQueue().length + getCCBookingFlow().length;
     if (window.__intakeMacroByEmail) {
-      actionsCount += getIntakePending().length + getIntakeReview().length + getIntakeReady().length;
+      actionsCount += getIntakePending().length + getIntakeReady().length;
     }
   } catch(_) { actionsCount = 0; }
 
@@ -3643,16 +3634,15 @@ function renderActionQueueCard({ p, action }) {
 }
 
 // ── Intake Form section (reads from Macro Engine spreadsheet) ──────────
-// Three buckets:
+// Two buckets:
 //   - Ready to Assign (READY TO ASSIGN status): macros pre-filled, Gabi copies into Everfit
-//   - Need Review (BERNARDO REVIEW status): Bernardo decides, with flag explanation
 //   - Pending: intake form not submitted yet, surface reminder cadence
+// The Setup Sheet Flag (which calorie rule acted) is Bernardo's audit trail; not shown here.
 function renderIntakeFormSection() {
   const cacheLoaded = !!window.__intakeMacroByEmail;
   const ready = cacheLoaded ? getIntakeReady() : [];
-  const review = cacheLoaded ? getIntakeReview() : [];
   const pending = cacheLoaded ? getIntakePending() : [];
-  const total = ready.length + review.length + pending.length;
+  const total = ready.length + pending.length;
 
   let body;
   if (!cacheLoaded) {
@@ -3665,11 +3655,6 @@ function renderIntakeFormSection() {
         <div class="intake-group">
           <div class="intake-group-header ready">🟢 Ready to Assign · ${ready.length}</div>
           ${ready.map(renderIntakeReadyCard).join('')}
-        </div>` : ''}
-      ${review.length > 0 ? `
-        <div class="intake-group">
-          <div class="intake-group-header review">🟡 Need Review · ${review.length} <span class="intake-group-sub">(Bernardo decides)</span></div>
-          ${review.map(renderIntakeReviewCard).join('')}
         </div>` : ''}
       ${pending.length > 0 ? `
         <div class="intake-group">
@@ -3722,35 +3707,6 @@ function renderIntakeReadyCard(p) {
           onclick="markOnboardingSent('${esc(p.email)}', 'training', this)">${trainingLabel}</button>
         <button class="${caloriesClass}" ${caloriesDone ? 'disabled' : ''}
           onclick="markOnboardingSent('${esc(p.email)}', 'calories', this)">${caloriesLabel}</button>
-      </div>
-    </div>
-  `;
-}
-
-function renderIntakeReviewCard(p) {
-  const d = (window.__intakeMacroByEmail || {})[(p.email || '').toLowerCase()];
-  if (!d || !d.macro) return '';
-  const m = d.macro;
-  const ini = initials(p.name);
-  const clr = nameColor(p.name);
-  return `
-    <div class="intake-card review">
-      <div class="intake-card-head">
-        <div class="avatar" style="background:${clr}">${ini}</div>
-        <div class="intake-card-meta">
-          <div class="intake-card-name">${esc(p.name)}</div>
-          <div class="intake-card-email">${esc(p.email || '')}</div>
-        </div>
-      </div>
-      <div class="intake-card-flag">⚠️ ${esc(m.flag || 'Flagged for review')}</div>
-      <div class="intake-card-macros muted">
-        <div class="intake-macro-row"><span class="intake-macro-label">Calories</span><span class="intake-macro-value">${esc(String(m.calories || '—'))}</span></div>
-        <div class="intake-macro-row"><span class="intake-macro-label">Protein</span><span class="intake-macro-value">${esc(String(m.protein || '—'))} g</span></div>
-        <div class="intake-macro-row"><span class="intake-macro-label">Program</span><span class="intake-macro-value">${esc(String(m.program || '—'))}</span></div>
-      </div>
-      <div class="intake-card-actions">
-        <a class="ob-btn" href="https://docs.google.com/spreadsheets/d/18WvFlZTO18hqKqCKfCUQvz6Nu_CzixIi_dVnHT8iDAA/edit" target="_blank" rel="noopener">View in Macro Engine ↗</a>
-        <button class="ob-btn" onclick="openModal('${esc(p.email)}')">Open participant</button>
       </div>
     </div>
   `;
@@ -3919,8 +3875,7 @@ function renderOnboarding() {
   //   further filter individual items by their original DC closer)
   // - "owner-gabi" = Gabi-only sections — Login Reachout, Welcome Message,
   //   Intake Form, Setup Tasks, and CC Booking Outreach. Bernardo doesn't
-  //   work any of these directly; flagged intakes still surface inside the
-  //   Intake Form section's "Need Review" bucket when Gabi opens it.
+  //   work any of these directly.
   wrap.innerHTML = `
     <div class="owner-deniz owner-joey">${actionQueueHtml}</div>
 

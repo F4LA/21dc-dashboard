@@ -1,6 +1,6 @@
 # DASHBOARD-SYSTEM — 21DC Dashboard (Strong Standard Coaching)
 
-**Última actualización: 2026-09-17**
+**Última actualización: 2026-09-23**
 
 **Documento vivo · Fuente de verdad permanente · Uso interno**
 Describe cómo funciona el 21DC Dashboard: su arquitectura, cada vista, cada botón, las integraciones, las decisiones y sus porqués. **No es un traspaso puntual** — es la referencia canónica que se mantiene actualizada en cada cambio al dashboard.
@@ -197,7 +197,7 @@ Router: `setView(view)`. `'queue'` y `'onboarding'` redirigen a `'today'`. Arran
    - **Action Queue** (Deniz/Joey): reschedule cadence + follow-ups. Atribuida al **closer del DC original** (regla de ownership). CC siempre Deniz. Deferida hasta que llegue la atribución de owner (muestra "⏳ Loading owner assignments…" hasta `window.__lastDcLoaded`).
    - **Login Reachout** (Gabi): two-tier (Reminder #1 → 24h → Reminder #2). Muestra "Logged in X days ago".
    - **Welcome Message** (Gabi): copy + mark sent. Muestra "Logged in X days ago".
-   - **Intake Form** (Gabi): lee del Macro Engine. 3 buckets — 🟢 Ready to Assign (status `READY TO ASSIGN`, con botones Training/Calories fusionados), 🟡 Need Review (`BERNARDO REVIEW`), ⚪ Intake Pending (sin form; state machine Reminder #1/#2). Carga en background (`loadIntakeMacroInBackground`).
+   - **Intake Form** (Gabi): lee del Macro Engine. 2 buckets — 🟢 Ready to Assign (status `READY TO ASSIGN`, con botones Training/Calories fusionados), ⚪ Intake Pending (sin form; state machine Reminder #1/#2). Carga en background (`loadIntakeMacroInBackground`). Desde D49 no hay bucket Need Review: filas históricas con `BERNARDO REVIEW` se ignoran sin error, y el Flag del Setup Sheet no se muestra a Gabi.
    - **Setup Tasks** (Training & Calories): **fusionada dentro del card Ready to Assign** del Intake; la sección propia quedó como dead code. Requiere intake submitted para aparecer.
    - **CC Booking Outreach** (Gabi, dueña única del flujo de agendamiento): Day 2 DM → Day 4 Call. La Day 4 Call es de **Bernardo** (tag `owner-bernardo`) y tiene botón inline "📅 Book CC now". Muestra "Challenge Day X". **El "Day 19 Offer Doc" se eliminó de este flujo (2026-08-03):** si nunca agendaron el CC, la probabilidad de que agenden DC es mínima; los offer docs son de Deniz, dentro de la reschedule cadence / conversación. La columna `Day 6 Offer Doc Sent` sigue existiendo (override manual pasivo en el modal).
    - Todo colapsado por default; estado persistido en localStorage por sección.
@@ -307,7 +307,7 @@ Secciones (de arriba a abajo):
 
 ## 8. Roles y personas (ownership)
 
-- **Bernardo** — Owner / Auditor. Vistas: Accountability (diario), Analytics (semanal), History (post-challenge), Settings. Hace la **Day 4 Call**. Revisa los intakes flagged (`BERNARDO REVIEW`).
+- **Bernardo** — Owner / Auditor. Vistas: Accountability (diario), Analytics (semanal), History (post-challenge), Settings. Hace la **Day 4 Call**. Audita en el Setup Sheet la columna Flag (qué regla de calorías actuó); desde D49 no hay revisión manual de intakes.
 - **Gabi** — Lead Coach / onboarding. **Dueña única del flujo de agendamiento del CC** (Day 2 DM → Day 4; el Day 19 Offer Doc se quitó de su plato el 2026-08-03) + Login Reachout + Welcome + Intake + Setup Tasks (Training/Calories). Reemplazó a **Jackie** (que salió). *Nombres internos de funciones (`getJackieFlags`, var `jackie`) NO se renombraron.*
 - **Deniz** (a veces "Dennis") — **Closer**. Dueño del CC (único CC closer, junto con Anthony) y de sus DCs/FUs. Dueño de la reschedule cadence (DM → Call #1 → Call #2 → Offer Doc). Regla: **el closer del DC original es dueño de todo lo downstream**.
 - **Joey** — **Closer**. Solo DCs y FUs (sin outreach de onboarding).
@@ -363,7 +363,7 @@ El challenge nuevo empieza a vender mientras el anterior aún corre → hay dos 
 
 - `getMacroEngineId_`, `normalizeEmail_`, `normalizeName_`, `getMacroData_(email, fullName)` → `{found, status, calories, protein, program, flag, matchedBy}`, `getIntakeData_`, `getAllIntakeMacro_()` (batch — lee cada tab del Macro Engine **una vez**), `testIntakeJoin()`.
 - **Join key:** email primero, fallback nombre completo (normalizado). El Dashboard solo **lee** el Macro Engine (corre "Execute as: Me", Bernardo es dueño de ambos).
-- Tabs del Macro Engine: `Setup Sheet` (Name, Email, Status, Calories/day, Protein (g)/day, Program, Flag) y `Form Responses 1` (Timestamp, Email Address, …, Full name). Statuses: `READY TO ASSIGN` (verde), `BERNARDO REVIEW` (amarillo), `INCOMPLETE` (gris).
+- Tabs del Macro Engine: `Setup Sheet` (Name, Email, Status, Calories/day, Protein (g)/day, Program, Flag) y `Form Responses 1` (Timestamp, Email Address, …, Full name). Statuses: `READY TO ASSIGN` (verde), `INCOMPLETE` (gris). `BERNARDO REVIEW` (amarillo) solo aparece en filas históricas previas a D49.
 
 ### 10.5. `Macro_Engine.gs` (Apps Script SEPARADO del Macro Engine sheet)
 
@@ -416,7 +416,7 @@ El challenge nuevo empieza a vender mientras el anterior aún corre → hay dos 
 
 ### 13.2. Macro Engine (intake + macros)
 
-Ver §10.4. El intake form ya **no** se llena en Everfit — ahora es un **Google Form** que alimenta el Macro Engine. El dashboard lee el status/macros y muestra los 3 buckets del Intake Form.
+Ver §10.4. El intake form ya **no** se llena en Everfit — ahora es un **Google Form** que alimenta el Macro Engine. El dashboard lee el status/macros y muestra los 2 buckets del Intake Form.
 
 ### 13.3. Anthropic (AI Analysis)
 
