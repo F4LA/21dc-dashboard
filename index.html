@@ -614,29 +614,38 @@
     }
     /* Filter hide rules: when the selected owner doesn't include a section's
        owner class, hide that section. Mixed sections (e.g., "owner-gabi
-       owner-bernardo", "owner-deniz owner-joey", "owner-deniz owner-anthony")
-       show for all listed owners. owner-anthony exists for Clarity Calls only;
-       lifecycle ownership (DC/FU and Action Queue) stays on Deniz/Joey. */
+       owner-bernardo", "owner-deniz owner-joey") show for all listed owners.
+       Alan and Boaz are full closers (CC + DC, same as Deniz). */
     .main.filter-gabi .owner-deniz:not(.owner-gabi),
     .main.filter-gabi .owner-bernardo:not(.owner-gabi),
     .main.filter-gabi .owner-joey:not(.owner-gabi),
-    .main.filter-gabi .owner-anthony:not(.owner-gabi) { display: none; }
+    .main.filter-gabi .owner-alan:not(.owner-gabi),
+    .main.filter-gabi .owner-boaz:not(.owner-gabi) { display: none; }
     .main.filter-bernardo .owner-deniz:not(.owner-bernardo),
     .main.filter-bernardo .owner-gabi:not(.owner-bernardo),
     .main.filter-bernardo .owner-joey:not(.owner-bernardo),
-    .main.filter-bernardo .owner-anthony:not(.owner-bernardo) { display: none; }
+    .main.filter-bernardo .owner-alan:not(.owner-bernardo),
+    .main.filter-bernardo .owner-boaz:not(.owner-bernardo) { display: none; }
     .main.filter-deniz .owner-gabi:not(.owner-deniz),
     .main.filter-deniz .owner-bernardo:not(.owner-deniz),
     .main.filter-deniz .owner-joey:not(.owner-deniz),
-    .main.filter-deniz .owner-anthony:not(.owner-deniz) { display: none; }
+    .main.filter-deniz .owner-alan:not(.owner-deniz),
+    .main.filter-deniz .owner-boaz:not(.owner-deniz) { display: none; }
     .main.filter-joey .owner-gabi:not(.owner-joey),
     .main.filter-joey .owner-bernardo:not(.owner-joey),
     .main.filter-joey .owner-deniz:not(.owner-joey),
-    .main.filter-joey .owner-anthony:not(.owner-joey) { display: none; }
-    .main.filter-anthony .owner-gabi:not(.owner-anthony),
-    .main.filter-anthony .owner-bernardo:not(.owner-anthony),
-    .main.filter-anthony .owner-deniz:not(.owner-anthony),
-    .main.filter-anthony .owner-joey:not(.owner-anthony) { display: none; }
+    .main.filter-joey .owner-alan:not(.owner-joey),
+    .main.filter-joey .owner-boaz:not(.owner-joey) { display: none; }
+    .main.filter-alan .owner-gabi:not(.owner-alan),
+    .main.filter-alan .owner-bernardo:not(.owner-alan),
+    .main.filter-alan .owner-deniz:not(.owner-alan),
+    .main.filter-alan .owner-joey:not(.owner-alan),
+    .main.filter-alan .owner-boaz:not(.owner-alan) { display: none; }
+    .main.filter-boaz .owner-gabi:not(.owner-boaz),
+    .main.filter-boaz .owner-bernardo:not(.owner-boaz),
+    .main.filter-boaz .owner-deniz:not(.owner-boaz),
+    .main.filter-boaz .owner-joey:not(.owner-boaz),
+    .main.filter-boaz .owner-alan:not(.owner-boaz) { display: none; }
 
 
     /* ── Action Queue cards (inside Actions Today) ─────────── */
@@ -1492,7 +1501,7 @@ function setView(view) {
   // Clear any owner-filter classes left over from a previous Today render.
   // applyOwnerFilter() will restore the correct one if we're entering Today.
   const mainEl = document.querySelector('.main');
-  if (mainEl) mainEl.classList.remove('filter-all', 'filter-gabi', 'filter-bernardo', 'filter-deniz', 'filter-joey', 'filter-anthony');
+  if (mainEl) mainEl.classList.remove('filter-all', 'filter-gabi', 'filter-bernardo', 'filter-deniz', 'filter-joey', 'filter-alan', 'filter-boaz');
 
   if (view === 'today') {
     // Today is the master operational view: Calls + Actions Today (Action
@@ -3061,7 +3070,7 @@ function applyOwnerFilter() {
   const owner = getOwnerFilter();
   const main = document.querySelector('.main');
   if (!main) return;
-  main.classList.remove('filter-all', 'filter-gabi', 'filter-bernardo', 'filter-deniz', 'filter-joey', 'filter-anthony');
+  main.classList.remove('filter-all', 'filter-gabi', 'filter-bernardo', 'filter-deniz', 'filter-joey', 'filter-alan', 'filter-boaz');
   main.classList.add('filter-' + owner);
   document.querySelectorAll('.owner-filter-pill').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.owner === owner);
@@ -3113,7 +3122,7 @@ function updateSectionCountsForFilter() {
 function cardVisibleUnderFilter(card, filter) {
   if (filter === 'all') return true;
   const wanted = 'owner-' + filter;
-  const OWNER_CLASSES = ['owner-deniz', 'owner-joey', 'owner-gabi', 'owner-bernardo', 'owner-anthony'];
+  const OWNER_CLASSES = ['owner-deniz', 'owner-joey', 'owner-gabi', 'owner-bernardo', 'owner-alan', 'owner-boaz'];
   let el = card;
   while (el && el.nodeType === 1) {
     const cl = el.classList;
@@ -3132,7 +3141,8 @@ function renderOwnerFilterBar() {
     { id: 'bernardo', label: 'Bernardo' },
     { id: 'deniz',    label: 'Deniz' },
     { id: 'joey',     label: 'Joey' },
-    { id: 'anthony',  label: 'Anthony' }
+    { id: 'alan',     label: 'Alan' },
+    { id: 'boaz',     label: 'Boaz' }
   ];
   return `
     <div class="owner-filter-bar">
@@ -3266,23 +3276,24 @@ function renderTodayContent(wrap, events) {
   // collapse + localStorage persistence (same machinery as Onboarding).
   // All sub-sections default to collapsed — user expands the ones they want.
   // Owner-class wrappers per sub-section:
-  //   - CC takes Deniz or Anthony (the two CC callers) → owner-deniz
-  //     owner-anthony; each card carries its own owner class for fine filtering.
-  //   - DC/FU take Deniz or Joey (the closers) → owner-deniz owner-joey.
+  //   - CC takes Deniz, Alan, or Boaz (the CC callers) → owner-deniz
+  //     owner-alan owner-boaz; each card carries its own owner class for fine filtering.
+  //   - DC/FU take Deniz, Joey, Alan, or Boaz (the closers) → owner-deniz owner-joey
+  //     owner-alan owner-boaz.
   //   - The master section must list everyone who could have a call today, so
-  //     it's tagged with all three.
+  //     it's tagged with all of them.
   const callsInner = `
-    <div class="owner-deniz owner-anthony">
+    <div class="owner-deniz owner-alan owner-boaz">
       ${obSection('calls-cc', 'Clarity Calls today', cc.length,
         'Real call times from GHL Calendar. Click any card to open the participant.',
         renderList(cc), true /* defaultCollapsed */)}
     </div>
-    <div class="owner-deniz owner-joey">
+    <div class="owner-deniz owner-joey owner-alan owner-boaz">
       ${obSection('calls-dc', 'Discovery Calls today', dc.length,
         'Real call times from GHL Calendar. Click any card to open the participant.',
         renderList(dc), true /* defaultCollapsed */)}
     </div>
-    <div class="owner-deniz owner-joey">
+    <div class="owner-deniz owner-joey owner-alan owner-boaz">
       ${obSection('calls-fu', 'Follow-Up Calls today', fu.length,
         'Second/third conversations after the initial DC. Outcome buttons live in the participant modal.',
         renderList(fu), true /* defaultCollapsed */)}
@@ -3309,7 +3320,7 @@ function renderTodayContent(wrap, events) {
   wrap.innerHTML = `
     ${renderOwnerFilterBar()}
     <div class="today-header">${esc(dateLabel)}</div>
-    <div class="owner-deniz owner-joey owner-anthony">
+    <div class="owner-deniz owner-joey owner-alan owner-boaz">
       ${obSection('calls-today-master', '📞 Calls Today', totalCalls, '', callsInner, true /* defaultCollapsed */)}
     </div>
     ${obSection('actions-today-master', '⚡ Actions Today', actionsCount, '',
@@ -3319,23 +3330,24 @@ function renderTodayContent(wrap, events) {
 
 // Maps an assignedUserName (from a GHL event) to the owner CSS class used by
 // the Today filter. This is the LIFECYCLE resolver — used for DC/FU cards and
-// Action Queue items. Only closers (Joey, Deniz) belong here; Anthony does
-// Clarity Calls only and must never appear as a lifecycle owner.
+// Action Queue items. Closers who take DC/FU: Joey, Deniz, Alan, Boaz.
+// Unrecognized names default to Deniz (legacy fallback — same behavior as before).
 function ownerClassFromAssignedUser(name) {
   if (!name) return 'owner-deniz';
   const first = String(name).trim().split(/\s+/)[0].toLowerCase();
   if (first === 'joey') return 'owner-joey';
+  if (first === 'alan') return 'owner-alan';
+  if (first === 'boaz') return 'owner-boaz';
   return 'owner-deniz';
 }
 
-// CC-specific resolver. Anthony was added to the team to take Clarity Calls
-// alongside Deniz. CCs assigned to him get owner-anthony so the Anthony
-// filter shows only his CCs and nothing else. DCs, FUs, and downstream
-// lifecycle outreach stay with Deniz/Joey via ownerClassFromAssignedUser.
+// CC-specific resolver. Deniz, Alan, and Boaz all take Clarity Calls.
+// Unrecognized names default to Deniz (legacy fallback — same behavior as before).
 function ownerClassFromCcAssigned(name) {
   if (!name) return 'owner-deniz';
   const first = String(name).trim().split(/\s+/)[0].toLowerCase();
-  if (first === 'anthony') return 'owner-anthony';
+  if (first === 'alan') return 'owner-alan';
+  if (first === 'boaz') return 'owner-boaz';
   return 'owner-deniz';
 }
 
@@ -3392,8 +3404,8 @@ function renderTodayEventCard(ev) {
 
   const externalPanelHost = !matched ? `<div class="external-panel-host" id="ext-panel-${esc(ev.eventId || email)}"></div>` : '';
 
-  // CC ownership: Deniz or Anthony (per CC-specific resolver). DC/FU use the
-  // lifecycle resolver and only land on Deniz or Joey.
+  // CC ownership: Deniz, Alan, or Boaz (per CC-specific resolver). DC/FU use
+  // the lifecycle resolver and land on Deniz, Joey, Alan, or Boaz.
   const ownerCls = ev.callType === 'CC'
     ? ownerClassFromCcAssigned(ev.assignedUserName)
     : ownerClassFromAssignedUser(ev.assignedUserName);
@@ -6324,7 +6336,7 @@ function onOverlayClick(e) {
 // who on the team actually wrote it. We capture the author in the dashboard and
 // prepend it to the note body ("[Gabi] …"). Mandatory — no note without one.
 // Persisted in localStorage so each teammate picks themselves once per device.
-const NOTE_AUTHORS = ['Gabi', 'Bernardo', 'Deniz', 'Joey', 'Anthony'];
+const NOTE_AUTHORS = ['Gabi', 'Bernardo', 'Deniz', 'Joey', 'Alan', 'Boaz'];
 
 function getSavedNoteAuthor() {
   try { return localStorage.getItem('note-author') || ''; } catch(_) { return ''; }
